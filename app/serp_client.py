@@ -134,7 +134,14 @@ class SerpClient:
             params: dict[str, Any] = {"engine": "google_play", "q": query}
             if token:
                 params["next_page_token"] = token
-            data = self._request(params)
+            try:
+                data = self._request(params)
+            except SerpApiError:
+                # A later page often errors even when page 1 was real.
+                # Keep the titles already collected instead of failing the scan.
+                if not collected:
+                    raise
+                break
             self.calls["google_play"] += 1
             pages += 1
             collected.extend(self._parse_play_items(data, source_label=query))

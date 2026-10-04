@@ -23,7 +23,10 @@ def run_brief(idea: GameIdea, settings: Settings | None = None) -> Brief:
     ranked = _rank_for_enrichment(idea, unique)
     enriched: list[PlayApp] = []
     for app in ranked[: settings.max_product_lookups]:
-        detail = client.enrich_product(app.product_id)
+        try:
+            detail = client.enrich_product(app.product_id)
+        except SerpApiError:
+            detail = None
         if detail is None:
             enriched.append(app)
             continue
@@ -97,7 +100,10 @@ def _enrich(client: SerpClient, apps: list[PlayApp], limit: int) -> list[PlayApp
             break
         if app.product_id in seen:
             continue
-        detail = client.enrich_product(app.product_id)
+        try:
+            detail = client.enrich_product(app.product_id)
+        except SerpApiError:
+            detail = None
         if detail is None:
             out.append(app)
             seen.add(app.product_id)
