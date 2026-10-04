@@ -1,53 +1,21 @@
-"""Deterministic trend / room / build-next analysis — no LLM."""
+"""Deterministic trend / room / build-next analysis — no LLM.
+
+Groups chart apps into gameplay loops (bus/parking sort, tile blast, …)
+from title + description tokens, then cites those titles in the copy.
+"""
 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
 
 from .analyzer import HEAVY_REVIEWS, token_frequency
-from .models import GenreStat, Opportunity, PlayApp, TokenStat, TrendScan, WebHit
+from .loops import GENERIC, classify_loop, loop_name, loop_twist
+from .models import GenreStat, Opportunity, PlayApp, TrendScan, WebHit
+from .query_planner import tokenize
 
-# Title tokens that often signal a crowded casual template.
-TEMPLATE_TOKENS = frozenset(
-    {
-        "jam",
-        "sort",
-        "merge",
-        "idle",
-        "tycoon",
-        "rush",
-        "master",
-        "go",
-        "io",
-        "puzzle",
-        "blast",
-        "match",
-        "3d",
-        "online",
-        "battle",
-        "war",
-        "legends",
-        "survivor",
-        "survival",
-        "park",
-        "parking",
-        "bus",
-        "car",
-        "water",
-        "color",
-        "colour",
-        "tile",
-        "block",
-        "ball",
-        "shooter",
-        "runner",
-        "race",
-        "racing",
-        "farm",
-        "city",
-        "craft",
-    }
-)
+# A loop is "crowded" once two or more chart apps land in it,
+# or one app already has heavy review mass.
+CROWDED_COUNT = 2
 
 
 def genre_stats(apps: list[PlayApp], limit: int = 10) -> list[GenreStat]:
@@ -76,161 +44,206 @@ def genre_stats(apps: list[PlayApp], limit: int = 10) -> list[GenreStat]:
     return stats[:limit]
 
 
-def find_opportunities(
-    apps: list[PlayApp],
-    genres: list[GenreStat],
-    tokens: list[TokenStat],
-) -> list[Opportunity]:
-    """Visible-but-not-saturated genres and title patterns."""
+def _fmt_app(app: PlayApp) -> str:
+    bits = [f"“{app.title}”"]
+    if app.developer:
+        bits.append(f"by {app.developer}")
+    if app.rating is not None and app.ratings_count is not None:
+        bits.append(f"({app.rating:.1f}★, {app.ratings_count:,} ratings)")
+    elif app.rating is not None:
+        bits.append(f"({app.rating:.1f}★)")
+    elif app.ratings_count is not None:
+        bits.append(f"({app.ratings_count:,} ratings)")
+    return " ".join(bits)
+
+
+def _cite(apps: list[PlayApp], limit: int = 3) -> str:
+    if not apps:
+        return "none"
+    return "; ".join(_fmt_app(a) for a in apps[:limit])
+
+
+def _is_heavy(app: PlayApp) -> bool:
+    return app.ratings_count is not None and app.ratings_count >= HEAVY_REVIEWS
+
+
+def worn_title_words(apps: list[PlayApp], limit: int = 4) -> list[str]:
+    """Words that repeat across titles in this loop — not generic filler."""
+    if len(apps) < 2:
+        # Single listing: words in its title that are loop-ish, still useful to avoid.
+        counts: Counter = Counter()
+        for tok in set(tokenize(apps[0].title)) if apps else []:
+            if tok not in GENERIC and len(tok) >= 3:
+                counts[tok] += 1
+        return [t for t, _ in counts.most_common(limit)]
+    counts = Counter()
+    for app in apps:
+        for tok in set(tokenize(app.title)):
+            if tok in GENERIC or len(tok) < 3:
+                continue
+            counts[tok] += 1
+    repeated = [(t, c) for t, c in counts.items() if c >= 2]
+    repeated.sort(key=lambda pair: (-pair[1], -len(pair[0]), pair[0]))
+    return [t for t, _ in repeated[:limit]]
+
+
+def cluster_apps(apps: list[PlayApp]) -> dict[str, list[PlayApp]]:
+    groups: dict[str, list[PlayApp]] = defaultdict(list)
+    for app in apps:
+        loop_id = classify_loop(app)
+        if loop_id:
+            groups[loop_id].append(app)
+    return groups
+
+
+def _crowded(apps: list[PlayApp]) -> bool:
+    if len(apps) >= CROWDED_COUNT:
+        return True
+    return len(apps) == 1 and _is_heavy(apps[0])
+
+
+def find_opportunities(apps: list[PlayApp]) -> list[Opportunity]:
+    """Room = a recognizable loop that is on the chart but not a clone pile.
+
+    Evidence always names the apps. If every matched loop is crowded, the
+    list is empty and the copy says so instead of inventing a genre.
+    """
+    groups = cluster_apps(apps)
     opps: list[Opportunity] = []
-    n = len(apps) or 1
-
-    for g in genres:
-        if g.genre == "Unknown":
+    for loop_id, group in groups.items():
+        if _crowded(group):
             continue
-        # Visible: at least 2 apps. Not saturated: share under 35% OR few heavies.
-        if g.count >= 2 and (g.share < 0.35 or g.heavy_count <= 1):
-            avg_bit = (
-                f", avg ~{int(g.avg_ratings):,} ratings among enriched"
-                if g.avg_ratings is not None
-                else ""
+        name = loop_name(loop_id)
+        worn = worn_title_words(group)
+        worn_bit = (
+            f" Title words already in use: {', '.join(worn)}."
+            if worn
+            else ""
+        )
+        # Higher room when the loop is merely visible (1 light app).
+        heavy = sum(1 for a in group if _is_heavy(a))
+        room = 1.0 - (0.25 * len(group)) - (0.4 * heavy)
+        opps.append(
+            Opportunity(
+                label=name,
+                kind="loop",
+                evidence=f"Only {_cite(group)}.{worn_bit} Twist that would still be new: {loop_twist(loop_id)}.",
+                room_score=round(room, 3),
             )
-            room = (1.0 - g.share) * (1.0 if g.heavy_count <= 1 else 0.7)
-            opps.append(
-                Opportunity(
-                    label=g.genre,
-                    kind="genre",
-                    evidence=(
-                        f"{g.count}/{n} chart apps ({int(g.share * 100)}%) in {g.genre}; "
-                        f"{g.heavy_count} heavy-review incumbents{avg_bit}"
-                    ),
-                    room_score=round(room + (0.15 if g.count >= 2 else 0), 3),
-                )
-            )
-
-    for t in tokens:
-        if t.token not in TEMPLATE_TOKENS:
-            continue
-        # Pattern shows up but is not everywhere.
-        if 2 <= t.count <= max(3, int(n * 0.35)):
-            room = 1.0 - t.share
-            opps.append(
-                Opportunity(
-                    label=t.token,
-                    kind="title_pattern",
-                    evidence=(
-                        f"“{t.token}” appears in {t.count}/{n} titles "
-                        f"({int(t.share * 100)}%) — visible on charts, not universal"
-                    ),
-                    room_score=round(room * 0.9, 3),
-                )
-            )
-
-    # Prefer genres slightly over raw tokens; stable tie-break.
-    opps.sort(key=lambda o: (-o.room_score, 0 if o.kind == "genre" else 1, o.label))
-    # Dedupe by label
-    out: list[Opportunity] = []
-    seen: set[str] = set()
-    for o in opps:
-        key = f"{o.kind}:{o.label.lower()}"
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(o)
-    return out[:6]
+        )
+    opps.sort(key=lambda o: (-o.room_score, o.label))
+    return opps[:4]
 
 
-def _top_titles(apps: list[PlayApp], limit: int = 5) -> str:
-    names = [f"“{a.title}”" for a in apps[:limit] if a.title]
-    if not names:
-        return "no titles"
-    return ", ".join(names)
-
-
-def trending_summary_text(
-    apps: list[PlayApp], genres: list[GenreStat], sources: list[str]
-) -> str:
-    n = len(apps)
-    if n == 0:
+def trending_summary_text(apps: list[PlayApp], sources: list[str]) -> str:
+    if not apps:
         return (
             "No chart apps returned for this market — check the SerpApi key, "
             "credits, and gl/hl settings."
         )
-    top_g = genres[0].genre if genres else "mixed"
-    movers = [a for a in apps if a.chart == "movers_shakers"]
-    sellers = [a for a in apps if a.chart == "topselling_free"]
+    groups = cluster_apps(apps)
+    named = [_fmt_app(a) for a in apps[:4]]
     bits = [
-        f"Scanned {n} unique Google Play game chart apps ({', '.join(sources)}).",
-        f"Largest genre slice: {top_g}"
-        + (f" ({genres[0].count} apps, {int(genres[0].share * 100)}%)." if genres else "."),
+        f"This pull has {len(apps)} Play games ({', '.join(sources)}).",
+        "Named on the charts: " + "; ".join(named) + ".",
     ]
-    if sellers:
-        bits.append(f"Top free examples: {_top_titles(sellers, 3)}.")
-    if movers:
-        bits.append(f"Movers & shakers examples: {_top_titles(movers, 3)}.")
+    if groups:
+        loop_bits = []
+        for loop_id, group in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+            loop_bits.append(f"{loop_name(loop_id)} ({len(group)}: {_cite(group, 2)})")
+        bits.append("Loops in this pull: " + "; ".join(loop_bits) + ".")
+    else:
+        bits.append(
+            "None of these titles matched a known casual loop (bus/parking sort, "
+            "tile blast, survivor.io, merge, idle tycoon) — read the named games, "
+            "do not invent a genre from the Play category label."
+        )
     return " ".join(bits)
 
 
-def room_summary_text(opportunities: list[Opportunity], tokens: list[TokenStat]) -> str:
-    if not opportunities:
-        saturated = ", ".join(f"“{t.token}”" for t in tokens[:4]) or "common title words"
+def room_summary_text(apps: list[PlayApp], opportunities: list[Opportunity]) -> str:
+    groups = cluster_apps(apps)
+    crowded = [(lid, g) for lid, g in groups.items() if _crowded(g)]
+    if not groups:
+        cited = _cite(apps, 3)
         return (
-            f"This sample looks tightly clustered around {saturated}. "
-            "Room is limited unless you differentiate with a specific fantasy or constraint."
+            f"No recognizable loop cluster in this pull ({cited}). "
+            "That is not a green light — the shelf may just be big-brand charts. "
+            "Do not treat a Play category like Casual as an open genre."
+        )
+    if not opportunities:
+        # Everything we recognized is crowded. Name the closest (smallest) gap.
+        crowded.sort(key=lambda pair: (len(pair[1]), -sum(1 for a in pair[1] if _is_heavy(a))))
+        lid, group = crowded[0]
+        worn = worn_title_words(group)
+        worn_bit = ", ".join(worn) if worn else "the words already in those titles"
+        return (
+            f"The shelf is crowded. Closest gap is still {loop_name(lid)}, "
+            f"and it is not open: {_cite(group)}. "
+            f"Worn title words: {worn_bit}. "
+            f"A build only makes sense if the twist is {loop_twist(lid)}."
         )
     parts = []
     for o in opportunities[:3]:
-        kind = "genre" if o.kind == "genre" else "title pattern"
-        parts.append(f"{o.label} ({kind})")
-    return (
-        "Visible but not fully saturated: "
-        + "; ".join(parts)
-        + ". These show up on charts without owning every slot."
-    )
+        parts.append(f"{o.label} — {o.evidence}")
+    return "Still has room (visible, not a clone pile): " + " ".join(parts)
 
 
-def build_recommendation_text(
-    opportunities: list[Opportunity],
-    genres: list[GenreStat],
-    tokens: list[TokenStat],
-    apps: list[PlayApp],
-) -> str:
+def build_recommendation_text(apps: list[PlayApp], opportunities: list[Opportunity]) -> str:
     if not apps:
         return (
-            "Worth building next: wait for a successful chart pull, then target a niche "
-            "that appears on movers but is not the largest topselling genre."
+            "Worth building next: nothing, until a chart pull actually returns games. "
+            "Do not pick a genre slogan from an empty scan."
         )
-    pick = opportunities[0] if opportunities else None
-    heavy = sum(
-        1 for a in apps if a.ratings_count is not None and a.ratings_count >= HEAVY_REVIEWS
-    )
-    if pick and pick.kind == "genre":
+    groups = cluster_apps(apps)
+    if opportunities:
+        pick = opportunities[0]
         return (
-            f"Worth building next: a small-scope game in {pick.label} that avoids the "
-            f"most repeated title tokens "
-            f"({', '.join(t.token for t in tokens[:3]) or 'jam/sort/idle'}). "
-            f"Evidence: {pick.evidence}. "
-            f"Among enriched titles, {heavy} already look review-heavy — win on a clear twist, "
-            f"not a clone name."
+            f"Worth building next: a {pick.label} prototype, but only with this twist — "
+            f"{pick.evidence}"
         )
-    if pick and pick.kind == "title_pattern":
-        avoid = [t.token for t in tokens if t.share >= 0.35][:3]
-        avoid_bit = (
-            f" Avoid leading with {', '.join(avoid)} in the title."
-            if avoid
-            else ""
-        )
+    if not groups:
         return (
-            f"Worth building next: lean into the “{pick.label}” pattern that already charts "
-            f"({pick.evidence}), but brand it with a unique proper noun so it is searchable."
-            f"{avoid_bit}"
+            "Worth building next: not a genre slogan. "
+            f"These charts are {_cite(apps, 3)}. "
+            "The shelf looks like big-brand or unmatched titles, not an open casual loop. "
+            "Closest honest read: pick one of those named games and change the fantasy, "
+            "or run idea-check on a specific title before building."
         )
-    top = genres[0].genre if genres else "Puzzle"
+    # Crowded shelf — closest gap is the smallest crowded loop.
+    ranked = sorted(groups.items(), key=lambda kv: (len(kv[1]), kv[0]))
+    lid, group = ranked[0]
+    worn = worn_title_words(group)
+    worn_bit = ", ".join(worn) if worn else "the repeated title words"
     return (
-        f"Worth building next: a focused {top} prototype with a memorable proper-noun title. "
-        f"Charts are active ({len(apps)} apps sampled) but no clear under-served slice stood out — "
-        f"differentiation matters more than genre-chasing."
+        f"Worth building next: not another {loop_name(lid)} clone. "
+        f"The shelf is crowded — closest gap is {loop_name(lid)} "
+        f"({_cite(group)}), and the worn words are {worn_bit}. "
+        f"Only build it if the twist is {loop_twist(lid)}."
     )
+
+
+def crowded_loop_notes(apps: list[PlayApp]) -> list[Opportunity]:
+    """Crowded loops, cited, so the UI can list worn words + real titles."""
+    notes: list[Opportunity] = []
+    for loop_id, group in cluster_apps(apps).items():
+        if not _crowded(group):
+            continue
+        worn = worn_title_words(group)
+        worn_bit = ", ".join(worn) if worn else "no repeated title word beyond the brand"
+        notes.append(
+            Opportunity(
+                label=loop_name(loop_id),
+                kind="crowded_loop",
+                evidence=(
+                    f"Worn title words: {worn_bit}. "
+                    f"Seen here: {_cite(group)}."
+                ),
+                room_score=0.0,
+            )
+        )
+    notes.sort(key=lambda o: o.label)
+    return notes
 
 
 def analyze_trends(
@@ -243,15 +256,17 @@ def analyze_trends(
 ) -> TrendScan:
     genres = genre_stats(apps)
     tokens = token_frequency(apps)
-    opps = find_opportunities(apps, genres, tokens)
+    room_opps = find_opportunities(apps)
+    # UI list: room first, then crowded notes (kind distinguishes them).
+    opps = room_opps + crowded_loop_notes(apps)
     web_hits = web_hits or []
-    trending = trending_summary_text(apps, genres, sources)
-    room = room_summary_text(opps, tokens)
-    build = build_recommendation_text(opps, genres, tokens, apps)
+    trending = trending_summary_text(apps, sources)
+    room = room_summary_text(apps, room_opps)
+    build = build_recommendation_text(apps, room_opps)
     if web_hits:
+        first = web_hits[0]
         trending += (
-            f" Web coverage added {len(web_hits)} recent articles/posts about mobile games "
-            "(separate from the store shelf)."
+            f" Separate from the store, web coverage includes “{first.title}”."
         )
     return TrendScan(
         sources=sources,

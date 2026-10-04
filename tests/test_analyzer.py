@@ -74,3 +74,5 @@ def test_analyze_returns_three_findings_and_cautions():
     assert len(brief.cautions) == 3
     assert brief.saturation_label
     assert brief.sample_mode is False
+    joined = " ".join(brief.findings + brief.cautions)
+    assert "Bus Jam Color Sort" in joined or "Parking Jam Out" in joined

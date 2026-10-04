@@ -60,10 +60,12 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 ## What the trend scan shows
 
-- **Trending now** — unique apps from topselling free + movers & shakers, genre mix, example titles
-- **Still has room** — genres/title patterns that appear on charts but are not dominant / not packed with heavy-review incumbents
-- **Worth building next** — one short recommendation grounded in those counts
-- Optional **web coverage** hits from Google organic results
+- **Trending now** — named chart games (title, developer, rating, ratings count), grouped into loops such as bus/parking sort, tile blast, survivor.io, merge, and idle tycoon. Grouping uses title and description words, not the Play genre label.
+- **Crowded loops** — which title words are worn out, citing 2–3 of those games.
+- **Still has room / worth building next** — a specific loop plus the twist that would still be new, tied to the games in the pull. If every loop is crowded, the copy says the shelf is crowded and names the closest gap instead of a genre slogan.
+- Optional **web coverage** hits from Google organic results, separate from the store.
+
+Idea check findings and cautions name competitor titles, not only token percentages.
 
 ## Example idea-check input
 

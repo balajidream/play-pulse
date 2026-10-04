@@ -32,10 +32,11 @@
   <article class="card answer">
     <h2>2. Still has room</h2>
     <p>{{ room_summary }}</p>
-    {% if opportunities %}
+    {% set room = opportunities|selectattr('kind', 'equalto', 'loop')|list %}
+    {% if room %}
     <ul class="opp">
-      {% for o in opportunities[:4] %}
-      <li><strong>{{ o.label }}</strong> <span class="fine">({{ o.kind }})</span><br />{{ o.evidence }}</li>
+      {% for o in room %}
+      <li><strong>{{ o.label }}</strong><br />{{ o.evidence }}</li>
       {% endfor %}
     </ul>
     {% endif %}
@@ -45,6 +46,20 @@
     <p>{{ build_recommendation }}</p>
   </article>
 </section>
+
+
+{% set crowded = opportunities|selectattr('kind', 'equalto', 'crowded_loop')|list %}
+{% if crowded %}
+<section class="card">
+  <h2>Crowded loops</h2>
+  <p class="fine">Title words that are worn out, with the chart games that use them.</p>
+  <ul class="opp">
+    {% for o in crowded %}
+    <li><strong>{{ o.label }}</strong><br />{{ o.evidence }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <section class="grid two">
   <article class="card">

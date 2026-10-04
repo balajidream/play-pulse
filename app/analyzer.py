@@ -112,6 +112,43 @@ def saturation_read(
     )
 
 
+
+def _cite_titles(apps: list[PlayApp], limit: int = 3) -> str:
+    names = []
+    for app in apps[:limit]:
+        who = f" by {app.developer}" if app.developer else ""
+        rate = ""
+        if app.rating is not None and app.ratings_count is not None:
+            rate = f" ({app.rating:.1f}★, {app.ratings_count:,} ratings)"
+        elif app.ratings_count is not None:
+            rate = f" ({app.ratings_count:,} ratings)"
+        names.append(f"“{app.title}”{who}{rate}")
+    return ", ".join(names) if names else "no named competitors"
+
+
+def _apps_with_tokens(apps: list[PlayApp], tokens: list[str], limit: int = 3) -> list[PlayApp]:
+    want = {t.lower() for t in tokens}
+    hits: list[PlayApp] = []
+    for app in apps:
+        blob = set(tokenize(f"{app.title} {app.description}"))
+        if blob & want:
+            hits.append(app)
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def _close_title_apps(idea: GameIdea, apps: list[PlayApp]) -> list[PlayApp]:
+    idea_toks = set(distinctive_tokens(idea.title, idea.keywords, idea.pitch))
+    if not idea_toks:
+        return []
+    out = []
+    for app in apps:
+        if len(idea_toks & set(tokenize(app.title))) >= 2:
+            out.append(app)
+    return out
+
+
 def build_findings(
     idea: GameIdea,
     apps: list[PlayApp],
@@ -146,43 +183,47 @@ def build_findings(
             f"“{top.title}” by {top.developer or 'unknown'} ({rating_bit})."
         )
 
-    # Finding 2: saturated title tokens
+    # Finding 2: worn words, cited on real competitor titles
     saturated = [s for s in token_stats if s.share >= SATURATED_SHARE and s.count >= 2]
     if saturated:
-        words = ", ".join(f"“{s.token}” ({s.count}/{n})" for s in saturated[:4])
+        words = [s.token for s in saturated[:4]]
+        cited = _apps_with_tokens(apps, words, limit=3)
+        names = _cite_titles(cited)
         findings.append(
-            f"Title-token saturation: {words} show up across many competitor titles — "
-            f"those words alone will not differentiate “{idea.title}”."
+            f"Worn title words {', '.join(words)} already sit on {names}. "
+            f"Those words will not make “{idea.title}” look new next to them."
         )
-    elif token_stats:
+    elif token_stats and n:
         top_tok = token_stats[0]
+        cited = _apps_with_tokens(apps, [top_tok.token], limit=3)
+        names = _cite_titles(cited) if cited else "the listings above"
         findings.append(
-            f"Most common competitor title token is “{top_tok.token}” "
-            f"({top_tok.count} of {n} apps). The cluster is not fully saturated yet."
+            f"The word “{top_tok.token}” shows up on {names} "
+            f"({top_tok.count} of {n}). It is common, not yet on every title."
         )
     else:
         findings.append(
-            "Not enough competitor titles to compute token saturation."
+            "Not enough competitor titles to name worn words."
         )
 
-    # Finding 3: overlap + web coverage
+    # Finding 3: pitch overlap cited on competitor titles
     if overlap:
+        cited = _apps_with_tokens(apps, overlap[:6], limit=3)
+        names = _cite_titles(cited) if cited else "the Play results"
+        web_bit = (
+            f" Web coverage also returned {len(web_hits)} articles; "
+            f"the store collision is {names}."
+            if web_hits
+            else ""
+        )
         findings.append(
-            f"Your pitch already shares wording with live listings: "
-            f"{', '.join(overlap[:6])}. "
-            + (
-                f"Web coverage also returned {len(web_hits)} articles/posts about this genre."
-                if web_hits
-                else "Little recent web coverage showed up for the genre query."
-            )
+            f"Your pitch words ({', '.join(overlap[:6])}) already appear on {names}.{web_bit}"
         )
     else:
+        names = _cite_titles(apps[:3]) if apps else "no listings"
         findings.append(
-            "Pitch words barely appear in competitor titles/descriptions — either a fresh "
-            "angle or queries missed the real shelf. Cross-check the web hits."
-            if not web_hits
-            else f"Pitch overlap with store copy is low, but {len(web_hits)} web results "
-            f"still discuss this genre — store and press language may diverge."
+            f"Pitch words barely appear on the titles we pulled ({names}) — "
+            "either a fresh angle, or the queries missed the real shelf."
         )
 
     return findings[:3]
@@ -199,11 +240,13 @@ def build_cautions(
     title_l = idea.title.lower()
     saturated_words = {s.token for s in token_stats if s.share >= SATURATED_SHARE}
 
-    # Caution 1: title collision
-    if close_matches >= 2:
+    # Caution 1: title collision, named
+    close_apps = _close_title_apps(idea, apps)
+    if close_matches >= 2 or len(close_apps) >= 2:
         cautions.append(
-            f"Working title “{idea.title}” sits near {close_matches} existing titles that "
-            f"share multiple tokens — consider a more distinctive proper noun or setting."
+            f"Working title “{idea.title}” sits next to {_cite_titles(close_apps[:3])} — "
+            f"those listings already share multiple words with you. "
+            f"Use a proper noun they do not use."
         )
     elif any(t in title_l for t in saturated_words):
         hit = [t for t in saturated_words if t in title_l]

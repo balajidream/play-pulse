@@ -105,7 +105,7 @@ def run_trend_scan(settings: Settings | None = None):
         if len(enriched) >= 20:
             break
 
-    web_q = "trending mobile games Google Play 2026 OR 2025"
+    web_q = "\"Google Play\" trending mobile games puzzle OR casual"
     web_hits = client.search_google(web_q)
 
     return analyze_trends(
@@ -222,104 +222,114 @@ def sample_brief(idea: GameIdea | None = None) -> Brief:
 
 
 def sample_trend_scan():
-    """SAMPLE trend layout — fixture charts, not live SerpApi."""
+    """SAMPLE trend layout — fixture charts, not live SerpApi.
+
+    Descriptions are specific enough for loop classification (bus/parking sort,
+    tile blast, and so on). The page banner still says SAMPLE, not live.
+    """
     apps = [
         PlayApp(
             product_id="com.sample.blockblast",
-            title="Block Blast Puzzle",
-            developer="Sample A",
+            title="Block Blast!",
+            developer="Hungry Studio",
             rating=4.6,
-            ratings_count=2_000_000,
+            ratings_count=20_000_000,
             genre="Puzzle",
-            description="Block puzzle on charts.",
+            description="Blast wooden blocks off the board in this tile blast puzzle.",
             chart="topselling_free",
             source_query="chart:topselling_free",
             link="https://play.google.com/store/apps/details?id=com.sample.blockblast",
         ),
         PlayApp(
+            product_id="com.sample.woodoku",
+            title="Wood Block Puzzle",
+            developer="Tripledot",
+            rating=4.7,
+            ratings_count=8_000_000,
+            genre="Puzzle",
+            description="Fit wood blocks, then blast full lines. A tile blast cousin of Block Blast.",
+            chart="topselling_free",
+            source_query="chart:topselling_free",
+            link="https://play.google.com/store/apps/details?id=com.sample.woodoku",
+        ),
+        PlayApp(
             product_id="com.sample.busjam",
-            title="Bus Jam Traffic",
-            developer="Sample B",
+            title="Bus Jam Out",
+            developer="Ivy Games",
             rating=4.5,
             ratings_count=800_000,
             genre="Puzzle",
-            description="Bus parking jam.",
+            description="Unblock colorful buses stuck in a parking jam and clear the lot.",
             chart="topselling_free",
             source_query="chart:topselling_free",
             link="https://play.google.com/store/apps/details?id=com.sample.busjam",
         ),
         PlayApp(
-            product_id="com.sample.monopoly",
-            title="Monopoly GO!",
-            developer="Sample C",
-            rating=4.2,
-            ratings_count=5_000_000,
-            genre="Board",
+            product_id="com.sample.parkingjam",
+            title="Parking Jam 3D",
+            developer="Rollic",
+            rating=4.4,
+            ratings_count=400_000,
+            genre="Puzzle",
+            description="Sort cars out of a crowded parking jam. Tap to unblock the exit.",
             chart="topselling_free",
             source_query="chart:topselling_free",
-            link="https://play.google.com/store/apps/details?id=com.sample.monopoly",
+            link="https://play.google.com/store/apps/details?id=com.sample.parkingjam",
+        ),
+        PlayApp(
+            product_id="com.sample.trafficbus",
+            title="Traffic Jam Bus Puzzle",
+            developer="Easybrain",
+            rating=4.3,
+            ratings_count=120_000,
+            genre="Puzzle",
+            description="Clear a bus traffic jam. Move buses until the parking bay is free.",
+            chart="movers_shakers",
+            source_query="chart:movers_shakers",
+            link="https://play.google.com/store/apps/details?id=com.sample.trafficbus",
         ),
         PlayApp(
             product_id="com.sample.survivor",
             title="Survivor.io",
-            developer="Sample D",
+            developer="Habby",
             rating=4.4,
             ratings_count=1_200_000,
             genre="Action",
+            description="Survivor horde game: auto-attack waves in an .io arena.",
             chart="movers_shakers",
             source_query="chart:movers_shakers",
             link="https://play.google.com/store/apps/details?id=com.sample.survivor",
         ),
         PlayApp(
-            product_id="com.sample.farm",
-            title="Township Farm City",
-            developer="Sample E",
+            product_id="com.sample.merge",
+            title="Merge Mansion",
+            developer="Metacore",
             rating=4.5,
-            ratings_count=900_000,
-            genre="Simulation",
+            ratings_count=22_000,
+            genre="Puzzle",
+            description="Merge items to restore a mansion. Not a jam or blast game.",
             chart="movers_shakers",
             source_query="chart:movers_shakers",
-            link="https://play.google.com/store/apps/details?id=com.sample.farm",
+            link="https://play.google.com/store/apps/details?id=com.sample.merge",
         ),
         PlayApp(
             product_id="com.sample.idle",
             title="Idle Miner Tycoon",
-            developer="Sample F",
+            developer="Kolibri",
             rating=4.3,
-            ratings_count=400_000,
+            ratings_count=4_000_000,
             genre="Simulation",
-            chart="movers_shakers",
-            source_query="chart:movers_shakers",
-            link="https://play.google.com/store/apps/details?id=com.sample.idle",
-        ),
-        PlayApp(
-            product_id="com.sample.racing",
-            title="Car Race Master",
-            developer="Sample G",
-            rating=4.1,
-            ratings_count=45_000,
-            genre="Racing",
-            chart="movers_shakers",
-            source_query="chart:movers_shakers",
-            link="https://play.google.com/store/apps/details?id=com.sample.racing",
-        ),
-        PlayApp(
-            product_id="com.sample.water",
-            title="Water Sort Puzzle",
-            developer="Sample H",
-            rating=4.7,
-            ratings_count=1_500_000,
-            genre="Puzzle",
+            description="Idle tycoon: dig, upgrade shafts, and leave the mine running.",
             chart="topselling_free",
             source_query="chart:topselling_free",
-            link="https://play.google.com/store/apps/details?id=com.sample.water",
+            link="https://play.google.com/store/apps/details?id=com.sample.idle",
         ),
     ]
     web_hits = [
         WebHit(
-            title="SAMPLE: Casual charts still favor puzzle and sim hybrids",
+            title="SAMPLE: Parking-jam puzzles and tile blast still own casual charts",
             link="https://example.com/sample-trends",
-            snippet="Editors note puzzle and simulation keep rotating through top free and movers lists.",
+            snippet="Writers name Bus Jam clones and Block Blast as the two casual piles, with merge as a thinner slice.",
             source="example.com",
         )
     ]
@@ -336,6 +346,7 @@ def sample_trend_scan():
         sample_mode=True,
         market="in",
     )
+
 
 
 __all__ = [

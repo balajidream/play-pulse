@@ -10,7 +10,7 @@ Paste these into the official form. **Do not** put phone numbers, home address, 
 
 ## Project description (what / who / why)
 
-**Play Pulse** helps indie mobile game developers in India decide what to build next using live Google Play data. The primary flow is a **trend scan**: SerpApi game charts show what is trending, which genres/title patterns still have room, and a short numbers-backed recommendation for what is worth prototyping. A second mode lets you **check a working title + pitch** against Play search and product enrichment (competitive shelf brief). Output is a scannable brief — not a chatbot. Built for judges to click through in under three minutes.
+**Play Pulse** helps indie mobile game developers in India decide what to build next using live Google Play data. The primary flow is a **trend scan**: SerpApi game charts name the actual games, group them into loops a developer recognizes (bus/parking sort, tile blast, survivor.io, merge, idle tycoon), call out worn title words on the crowded loops, and recommend a specific loop plus the twist that would still be new — or say the shelf is crowded and name the closest gap. A second mode lets you **check a working title + pitch** and cites the competitor titles you would ship next to. Output is a scannable brief — not a chatbot. Built for judges to click through in under three minutes.
 
 ## Track
 
