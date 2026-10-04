@@ -66,3 +66,34 @@ def test_discover_drops_thin_groups_and_sorts_by_copies():
     stories = discover_shelves(apps)
     assert [s.loop_name for s in stories] == ["tile blast", "match-3"]
     assert stories[0].seen_count - 1 < stories[1].seen_count - 1
+
+
+def test_unnamed_token_cluster_joins_the_ranking():
+    from app.market import discover_shelves
+
+    apps = []
+    apps.append(PlayApp(product_id="t0", title="Block Blast!", description="blast blocks", ratings_count=9_000_000))
+    apps.append(PlayApp(product_id="t1", title="Wood Block Puzzle", description="blast lines", ratings_count=100_000))
+    apps.append(PlayApp(product_id="t2", title="Tile Blast Rush", description="blast", ratings_count=50_000))
+    apps.append(PlayApp(product_id="t3", title="Block Puzzle Blast", description="blast", ratings_count=20_000))
+    for i, extra in enumerate(("Classic", "King", "Easy", "Vegas")):
+        apps.append(PlayApp(
+            product_id=f"s{i}",
+            title=f"Spider Solitaire {extra}",
+            description="card game",
+            ratings_count=5_000 - i,
+        ))
+    # Too few to form a shelf, and not a known loop.
+    apps.append(PlayApp(product_id="c1", title="Chess Master", ratings_count=100))
+    apps.append(PlayApp(product_id="c2", title="Chess Genius", ratings_count=90))
+    stories = discover_shelves(apps)
+    names = [s.loop_name for s in stories]
+    assert "tile blast" in names
+    cluster = next(s for s in stories if "solitaire" in s.loop_name and "spider" in s.loop_name)
+    assert cluster.seen_count == 4
+    assert {a.title for a in [cluster.hit, *cluster.clones]}.issubset(
+        {f"Spider Solitaire {x}" for x in ("Classic", "King", "Easy", "Vegas")}
+    )
+    assert all("Chess" not in s.loop_name for s in stories)
+    copies = [s.seen_count - 1 for s in stories]
+    assert copies == sorted(copies)

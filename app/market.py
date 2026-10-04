@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .loops import classify_loop, loop_name
+from .loops import GENERIC, classify_loop, loop_name
 from .models import PlayApp, WebHit
+from .query_planner import STOPWORDS, tokenize
 
 # A "giant" incumbent. Below this, a small cluster can still look early.
 GIANT_RATINGS = 500_000
@@ -131,6 +132,57 @@ def story_for(
     )
 
 
+
+# Title words that must not name a shelf or glue unrelated games together.
+CLUSTER_SKIP = STOPWORDS | GENERIC | frozenset(
+    {"game", "games", "puzzle", "free", "3d", "hd", "pro", "online", "offline", "new", "best"}
+)
+
+
+def _title_tokens(app: PlayApp) -> set[str]:
+    return {tok for tok in tokenize(app.title) if tok not in CLUSTER_SKIP and len(tok) >= 3}
+
+
+def _shelf_name(apps: list[PlayApp], seed: str) -> str:
+    sets = [_title_tokens(a) for a in apps]
+    if not sets:
+        return seed
+    common = set.intersection(*sets)
+    if seed not in common:
+        common.add(seed)
+    ordered = sorted(common, key=lambda tok: (tok != seed, -len(tok), tok))
+    return " ".join(ordered[:3])
+
+
+def cluster_unnamed(apps: list[PlayApp], first_page_only: bool = False) -> list[ShelfStory]:
+    """Group titles that missed a known loop by a shared distinctive title token.
+
+    Each title is used once. A cluster needs the hit plus at least 3 other titles.
+    The shelf name is the tokens those titles all share. No invented titles.
+    """
+    index: dict[str, list[PlayApp]] = {}
+    for app in apps:
+        for tok in _title_tokens(app):
+            index.setdefault(tok, []).append(app)
+    candidates = [tok for tok, group in index.items() if len(group) >= MIN_COPIES + 1]
+    # Smaller pools first so a tight token is not swallowed by a broader one.
+    candidates.sort(key=lambda tok: (len(index[tok]), tok))
+    used: set[str] = set()
+    stories: list[ShelfStory] = []
+    for tok in candidates:
+        group = [a for a in index[tok] if a.product_id not in used]
+        if len(group) < MIN_COPIES + 1:
+            continue
+        name = _shelf_name(group, tok)
+        story = story_for(name, group, first_page_only=first_page_only)
+        if story is None or story.seen_count < MIN_COPIES + 1:
+            continue
+        stories.append(story)
+        for app in group:
+            used.add(app.product_id)
+    return stories
+
+
 def discover_shelves(apps: list[PlayApp], first_page_only: bool = False) -> list[ShelfStory]:
     """Group titles with the loop classifier. Drop groups with fewer than 3 copies.
 
@@ -138,10 +190,12 @@ def discover_shelves(apps: list[PlayApp], first_page_only: bool = False) -> list
     """
     buckets: dict[str, list[PlayApp]] = {}
     seen: set[str] = set()
+    deduped: list[PlayApp] = []
     for app in apps:
         if not app.product_id or app.product_id in seen:
             continue
         seen.add(app.product_id)
+        deduped.append(app)
         loop_id = classify_loop(app)
         if not loop_id:
             continue
@@ -154,5 +208,7 @@ def discover_shelves(apps: list[PlayApp], first_page_only: bool = False) -> list
         if story is None or story.seen_count < MIN_COPIES + 1:
             continue
         stories.append(story)
+    leftover = [app for app in deduped if app.product_id not in {a.product_id for g in buckets.values() for a in g}]
+    stories.extend(cluster_unnamed(leftover, first_page_only=first_page_only))
     stories.sort(key=lambda s: (s.seen_count - 1, s.loop_name.lower()))
     return stories

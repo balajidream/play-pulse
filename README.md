@@ -60,7 +60,7 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 Each loop is one card: a large hit (icon, title, rating, ratings count) and smaller clone cards. **Early** means one much larger title and only a few copies, or a few similar titles with no giant. **Filled** means many copies. Icons come from SerpApi `thumbnail` (or `icon`) on `google_play` and `google_play_product`. If that URL is missing, the page uses `/static/placeholder.svg`.
 
-Market scan discovers loops from the chart and broad searches above. It does not start from a fixed pair of loops. A typed loop check still searches that one phrase.
+Market scan discovers loops from the chart and broad searches above. It does not start from a fixed pair of loops. Titles that miss a known loop are clustered by shared title words (not game, puzzle, free, or 3d). The shelf name is those shared words. A typed loop check still searches that one phrase.
 
 Idea check (title + pitch) is still at `POST /analyze`.
 
