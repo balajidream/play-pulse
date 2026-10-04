@@ -10,7 +10,7 @@ Paste these into the official form. **Do not** put phone numbers, home address, 
 
 ## Project description (what / who / why)
 
-**Play Pulse** helps indie mobile game developers in India decide what to build next using live Google Play data. The primary flow is a **trend scan**: SerpApi game charts name the actual games, group them into loops a developer recognizes (bus/parking sort, tile blast, survivor.io, merge, idle tycoon), call out worn title words on the crowded loops, and recommend a specific loop plus the twist that would still be new — or say the shelf is crowded and name the closest gap. A second mode lets you **check a working title + pitch** and cites the competitor titles you would ship next to. Output is a scannable brief — not a chatbot. Built for judges to click through in under three minutes.
+**Play Pulse** is an emerging-trend finder for indie mobile developers in India. The screen is visual and short: each loop is a card with the biggest title by ratings (the hit) and the smaller copies beside it, labeled Early or Filled. A market scan needs no idea. You can also type a loop such as bus parking sort or tile blast. SerpApi `google_play` and `google_play_product` supply the listings and icon URLs; one `google` search adds coverage. Size is ratings count, not an invented launch order. A title-and-pitch idea check is still available.
 
 ## Track
 
@@ -18,8 +18,8 @@ Paste these into the official form. **Do not** put phone numbers, home address, 
 
 ## SerpApi usage (engines and why)
 
-- **`google_play_games`** — trend core: `chart=topselling_free` and `chart=movers_shakers` with `games_category=GAME` (official Games Store API).
-- **`google_play`** — idea-check queries (`q`) and an optional casual puzzle probe on the trend path.
+- **`google_play`** — search a loop (`q`) so the hit and its copies come from the same shelf.
+- **`google_play_games`** — available in the client for charts, not used by the market scan (search shows clones more clearly).
 - **`google_play_product`** — enrich top unique apps (`product_id`, `store=apps`) with ratings, description, genre, developer.
 - **`google`** — one organic web search for recent writing about mobile games / the idea’s genre, shown separately from the store shelf.
 

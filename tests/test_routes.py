@@ -14,8 +14,8 @@ def test_home_ok():
     r = client.get("/")
     assert r.status_code == 200
     assert "Play Pulse" in r.text
-    assert "Scan live Play trends" in r.text
-    assert "check my idea" in r.text.lower() or "Check my idea" in r.text
+    assert "Scan the market" in r.text
+    assert "bus parking sort" in r.text
 
 
 def test_sample_trends_marked_not_live():
@@ -23,7 +23,10 @@ def test_sample_trends_marked_not_live():
     assert r.status_code == 200
     assert "SAMPLE PREVIEW" in r.text
     assert "NOT LIVE" in r.text
-    assert "Worth building" in r.text or "building next" in r.text.lower()
+    assert "Early" in r.text
+    assert "Filled" in r.text
+    assert "Block Blast!" in r.text
+    assert "/static/placeholder.svg" in r.text
 
 
 def test_sample_alias_and_idea():
@@ -67,11 +70,12 @@ def test_trends_with_mocked_run():
     scan = sample_trend_scan()
     scan.sample_mode = False
     with patch("app.main.get_settings", return_value=Settings(api_key="fake")):
-        with patch("app.main.run_trend_scan", return_value=scan):
+        with patch("app.main.run_market_scan", return_value=scan):
             r = client.post("/trends")
     assert r.status_code == 200
-    assert "Live trend scan" in r.text
+    assert "Block Blast!" in r.text
     assert "SAMPLE PREVIEW" not in r.text
+    assert "Early" in r.text or "Filled" in r.text
 
 
 def test_analyze_with_mocked_run():

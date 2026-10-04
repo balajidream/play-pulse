@@ -96,7 +96,7 @@ class SerpClient:
                         genre=item.get("category") or "",
                         link=item.get("link")
                         or f"https://play.google.com/store/apps/details?id={pid}",
-                        thumbnail=item.get("thumbnail") or "",
+                        thumbnail=item.get("thumbnail") or item.get("icon") or "",
                         source_query=source_label,
                         chart=chart,
                     )
@@ -163,7 +163,7 @@ class SerpClient:
             description=(about.get("snippet") or "")[:500],
             genre=genre,
             link=f"https://play.google.com/store/apps/details?id={product_id}",
-            thumbnail=info.get("thumbnail") or "",
+            thumbnail=info.get("thumbnail") or info.get("icon") or "",
         )
 
     def search_google(self, query: str, num: int = 8) -> list[WebHit]:

@@ -1,14 +1,8 @@
 # Play Pulse
 
-**See what’s trending on Google Play, where there’s still room, and what an indie should build next.**
+**One hit, then the copies.**
 
-Play Pulse is a local tool for indie mobile game developers (especially in India). It uses live SerpApi Play data to answer three questions in a short brief:
-
-1. **What’s trending** on Google Play game charts right now
-2. **What still has room** — genres or title patterns that are visible but not saturated
-3. **What’s worth building next** — a plain-language recommendation tied to those numbers
-
-A second mode keeps **check my idea** — a competitive shelf brief (title + pitch → Play search + saturation read).
+Play Pulse is an emerging-trend finder for indie mobile developers. A market scan needs no idea. Or type a loop (bus parking sort, tile blast). Each row is the biggest title by ratings count — size, not launch date — and the smaller copies of that loop, labeled **Early** or **Filled**.
 
 Built for the **SerpApi India Hackathon 2026** — track **Commerce & Market Intelligence**.
 
@@ -20,14 +14,16 @@ An indie deciding what to prototype next — or validating a working title befor
 
 | Engine | Mode | Why |
 | --- | --- | --- |
-| `google_play_games` | Trend scan | Top charts (`chart=topselling_free`, `chart=movers_shakers`, `games_category=GAME`) — verified against [Google Play Games API](https://serpapi.com/google-play-games). |
-| `google_play` | Trend (optional) + idea check | Query search (`q`) for idea probes / casual shelf probe. |
-| `google_play_product` | Both | Enrich top unique apps: title, developer, rating, ratings count, description, genre (`store=apps`). |
-| `google` | Both | One web search for recent coverage (“what people are writing”), separate from the shelf. |
+| `google_play` | Market scan and loop check | `q` finds games in one loop so the hit and the copies are on the same shelf. |
+| `google_play_product` | Both | Ratings count, developer, description, and `product_info.thumbnail` (`store=apps`). |
+| `google` | Both | One web search for coverage, separate from the shelf. |
+| `google_play_games` | Not used for this scan | Charts are in the client, but a chart does not show clones of one loop. |
+
+**Icons:** `thumbnail` on Play search items, and `thumbnail` or `icon` on the product payload. Missing image → `/static/placeholder.svg`.
 
 **Localization:** `hl=en`, `gl=in`.
 
-**Call budget:** about **≤10 credits** per run (trend: ~2 charts + ≤5 product + 1 Google; idea: ≤3 Play searches + ≤5 product + 1 Google).
+**Call budget:** about **≤10 credits** (market: 2 Play searches + ≤5 products + 1 Google; one loop: ≤2 searches + ≤5 products + 1 Google).
 
 There is **no LLM API**. Analysis is deterministic Python.
 
@@ -58,14 +54,13 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 | **Build idea brief** | Yes |
 | **SAMPLE idea preview** | No |
 
-## What the trend scan shows
+## What a scan shows
 
-- **Trending now** — named chart games (title, developer, rating, ratings count), grouped into loops such as bus/parking sort, tile blast, survivor.io, merge, and idle tycoon. Grouping uses title and description words, not the Play genre label.
-- **Crowded loops** — which title words are worn out, citing 2–3 of those games.
-- **Still has room / worth building next** — a specific loop plus the twist that would still be new, tied to the games in the pull. If every loop is crowded, the copy says the shelf is crowded and names the closest gap instead of a genre slogan.
-- Optional **web coverage** hits from Google organic results, separate from the store.
+Each loop is one card: a large hit (icon, title, rating, ratings count) and smaller clone cards. **Early** means one much larger title and only a few copies, or a few similar titles with no giant. **Filled** means many copies. Icons come from SerpApi `thumbnail` (or `icon`) on `google_play` and `google_play_product`. If that URL is missing, the page uses `/static/placeholder.svg`.
 
-Idea check findings and cautions name competitor titles, not only token percentages.
+Market scan: two Play searches (`bus jam parking puzzle`, `block blast puzzle`), up to 5 product lookups, one Google search. A single loop uses the same engines with at most two queries. No launch dates are invented.
+
+Idea check (title + pitch) is still at `POST /analyze`.
 
 ## Example idea-check input
 

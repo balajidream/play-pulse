@@ -1,155 +1,56 @@
 {% extends "base.html" %}
-{% block title %}{% if sample_mode %}SAMPLE — {% endif %}Trend scan · Play Pulse{% endblock %}
+{% block title %}{% if sample_mode %}SAMPLE — {% endif %}Play Pulse{% endblock %}
 {% block content %}
-
 {% if sample_mode %}
 <section class="banner sample">
   <strong>SAMPLE PREVIEW — NOT LIVE SERPAPI DATA</strong>
-  <span>Fixture chart apps for layout only. Use “Scan live Play trends” with a key for real results.</span>
 </section>
 {% endif %}
-
-<section class="card">
-  <p class="eyebrow">{% if sample_mode %}SAMPLE trend scan{% else %}Live trend scan{% endif %} · market {{ market|upper }}</p>
-  <h1>What’s moving on Google Play</h1>
-  <p class="lede">{{ trending_summary }}</p>
-  <p class="fine">Sources:
-    {% for s in sources %}<code>{{ s }}</code> {% endfor %}
-    {% if api_calls_used %}
-    · Calls: games {{ api_calls_used.get('google_play_games', 0) }} ·
-    play {{ api_calls_used.get('google_play', 0) }} ·
-    product {{ api_calls_used.get('google_play_product', 0) }} ·
-    google {{ api_calls_used.get('google', 0) }}
-    {% endif %}
-  </p>
-</section>
-
-<section class="grid three">
-  <article class="card answer">
-    <h2>1. Trending now</h2>
-    <p>{{ trending_summary }}</p>
-  </article>
-  <article class="card answer">
-    <h2>2. Still has room</h2>
-    <p>{{ room_summary }}</p>
-    {% set room = opportunities|selectattr('kind', 'equalto', 'loop')|list %}
-    {% if room %}
-    <ul class="opp">
-      {% for o in room %}
-      <li><strong>{{ o.label }}</strong><br />{{ o.evidence }}</li>
+<p class="fine">{% if focus %}{{ focus }} · {% endif %}Biggest by ratings count, not launch date.{% if market %} · {{ market|upper }}{% endif %}</p>
+{% if not stories %}
+<p class="card">No games came back for this pull.</p>
+{% endif %}
+{% for s in stories %}
+<section class="shelf card">
+  <header class="shelf-head">
+    <h2>{{ s.loop_name }}</h2>
+    <span class="pill {{ s.label|lower }}">{{ s.label }}</span>
+  </header>
+  <div class="row">
+    <a class="hit" href="{{ s.hit.link }}" target="_blank" rel="noopener">
+      <img src="{{ s.hit.thumbnail or '/static/placeholder.svg' }}" alt="" />
+      <div>
+        <strong>{{ s.hit.title }}</strong>
+        <span>{{ s.hit.developer or "—" }}</span>
+        <span>
+          {% if s.hit.rating is not none %}{{ '%.1f'|format(s.hit.rating) }}★{% else %}—{% endif %}
+          ·
+          {% if s.hit.ratings_count is not none %}{{ '{:,}'.format(s.hit.ratings_count) }}{% else %}no count{% endif %}
+        </span>
+      </div>
+    </a>
+    <div class="clones">
+      {% for c in s.clones %}
+      <a class="clone" href="{{ c.link }}" target="_blank" rel="noopener">
+        <img src="{{ c.thumbnail or '/static/placeholder.svg' }}" alt="" />
+        <div>
+          <strong>{{ c.title }}</strong>
+          <span>
+            {% if c.rating is not none %}{{ '%.1f'|format(c.rating) }}★{% endif %}
+            {% if c.ratings_count is not none %}{{ '{:,}'.format(c.ratings_count) }}{% endif %}
+          </span>
+        </div>
+      </a>
+      {% else %}
+      <p class="fine">No copies in this pull.</p>
       {% endfor %}
-    </ul>
-    {% endif %}
-  </article>
-  <article class="card answer recommend">
-    <h2>3. Worth building next</h2>
-    <p>{{ build_recommendation }}</p>
-  </article>
-</section>
-
-
-{% set crowded = opportunities|selectattr('kind', 'equalto', 'crowded_loop')|list %}
-{% if crowded %}
-<section class="card">
-  <h2>Crowded loops</h2>
-  <p class="fine">Title words that are worn out, with the chart games that use them.</p>
-  <ul class="opp">
-    {% for o in crowded %}
-    <li><strong>{{ o.label }}</strong><br />{{ o.evidence }}</li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
-<section class="grid two">
-  <article class="card">
-    <h2>Genre mix on charts</h2>
-    {% if genre_stats %}
-    <table>
-      <thead><tr><th>Genre</th><th>Apps</th><th>Share</th><th>Heavy</th></tr></thead>
-      <tbody>
-        {% for g in genre_stats %}
-        <tr>
-          <td>{{ g.genre }}</td>
-          <td>{{ g.count }}</td>
-          <td>
-            <div class="bar"><span style="width: {{ (g.share * 100)|int }}%"></span></div>
-            {{ (g.share * 100)|int }}%
-          </td>
-          <td>{{ g.heavy_count }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p>No genres yet.</p>
-    {% endif %}
-  </article>
-  <article class="card">
-    <h2>Title-token patterns</h2>
-    <p class="fine">How often chart titles reuse the same words.</p>
-    {% if token_stats %}
-    <table>
-      <thead><tr><th>Token</th><th>Apps</th><th>Share</th></tr></thead>
-      <tbody>
-        {% for t in token_stats %}
-        <tr>
-          <td><code>{{ t.token }}</code></td>
-          <td>{{ t.count }}</td>
-          <td>
-            <div class="bar"><span style="width: {{ (t.share * 100)|int }}%"></span></div>
-            {{ (t.share * 100)|int }}%
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p>No tokens yet.</p>
-    {% endif %}
-  </article>
-</section>
-
-<section class="card">
-  <h2>Chart apps (deduped)</h2>
-  <div class="apps">
-    {% for a in trending_apps %}
-    <article class="app">
-      <h3><a href="{{ a.link }}" target="_blank" rel="noopener">{{ a.title }}</a></h3>
-      <p class="meta">
-        {{ a.developer or 'Unknown developer' }}
-        {% if a.genre %} · {{ a.genre }}{% endif %}
-        {% if a.chart %} · {{ a.chart }}{% endif %}
-        {% if a.rating is not none %} · {{ '%.1f'|format(a.rating) }}★{% endif %}
-        {% if a.ratings_count is not none %} · {{ '{:,}'.format(a.ratings_count) }} ratings{% endif %}
-      </p>
-      {% if a.description %}<p class="snip">{{ a.description }}</p>{% endif %}
-    </article>
-    {% else %}
-    <p>No apps returned.</p>
-    {% endfor %}
+    </div>
   </div>
+  <p class="fine">{{ s.size_note }}</p>
 </section>
-
-{% if web_hits %}
-<section class="card">
-  <h2>What people are writing</h2>
-  <p class="fine">Google web organic results — separate from the store shelf.</p>
-  <ul class="web">
-    {% for h in web_hits %}
-    <li>
-      <a href="{{ h.link }}" target="_blank" rel="noopener">{{ h.title }}</a>
-      <span class="src">{{ h.source }}</span>
-      <p>{{ h.snippet }}</p>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
+{% endfor %}
 <div class="actions">
   <a class="btn primary" href="/">Home</a>
-  <a class="btn ghost" href="/#idea-check">Check my idea</a>
-  {% if not sample_mode %}<a class="btn ghost" href="/sample/trends">SAMPLE trend</a>{% endif %}
+  {% if not sample_mode %}<a class="btn ghost" href="/sample/trends">SAMPLE</a>{% endif %}
 </div>
 {% endblock %}

@@ -7,7 +7,7 @@ from .config import Settings, get_settings
 from .models import Brief, GameIdea, PlayApp, WebHit
 from .query_planner import plan_coverage_query, plan_queries
 from .serp_client import SerpApiError, SerpClient, dedupe_by_product_id
-from .trend_analyzer import analyze_trends
+from .market import MarketReport, story_for
 
 
 def run_brief(idea: GameIdea, settings: Settings | None = None) -> Brief:
@@ -55,67 +55,116 @@ def run_brief(idea: GameIdea, settings: Settings | None = None) -> Brief:
     )
 
 
-def run_trend_scan(settings: Settings | None = None):
-    """Live scan: trending charts → room → build recommendation.
+# Preset shelves for a market scan that does not need an idea.
+# Two Play searches leave room for product lookups + one web search (~8 calls).
+MARKET_PROBES = (
+    ("bus / parking sort", "bus jam parking puzzle"),
+    ("tile blast", "block blast puzzle"),
+)
 
-    Budget (~9 calls): 2 game charts + up to 5 product lookups + 1 Google web.
-    """
-    settings = settings or get_settings()
-    client = SerpClient(settings)
-    sources: list[str] = []
 
-    topselling = client.chart_games("topselling_free")
-    if topselling or client.calls["google_play_games"]:
-        sources.append("topselling_free")
-    movers = client.chart_games("movers_shakers")
-    if movers or client.calls["google_play_games"] >= 2:
-        sources.append("movers_shakers")
+def _query_for_loop(loop: str) -> tuple[str, str]:
+    text = (loop or "").strip().lower()
+    if any(w in text for w in ("bus", "parking", "jam")):
+        return "bus / parking sort", "bus jam parking puzzle"
+    if any(w in text for w in ("blast", "tile", "block")):
+        return "tile blast", "block blast puzzle"
+    if "survivor" in text or ".io" in text or " io" in text:
+        return "survivor.io style", "survivor.io game"
+    if "merge" in text:
+        return "merge", "merge mansion puzzle"
+    if "idle" in text or "tycoon" in text:
+        return "idle tycoon", "idle tycoon game"
+    name = (loop or "").strip() or "this loop"
+    return name, name
 
-    # Optional third play call: casual shelf probe if budget remains.
-    if client.play_calls < settings.max_play_searches:
-        probe = client.search_play("casual puzzle game")
-        if probe:
-            sources.append("q:casual puzzle game")
-        combined = topselling + movers + probe
-    else:
-        combined = topselling + movers
 
-    unique = dedupe_by_product_id(combined)
-
-    # Prefer enriching a mix of movers + topsellers.
-    ranked = _rank_for_trend_enrichment(unique)
-    enriched: list[PlayApp] = []
-    for app in ranked[: settings.max_product_lookups]:
+def _enrich(client: SerpClient, apps: list[PlayApp], limit: int) -> list[PlayApp]:
+    ranked = sorted(
+        apps,
+        key=lambda a: (a.ratings_count is not None, -(a.rating or 0), a.title.lower()),
+    )
+    out: list[PlayApp] = []
+    seen: set[str] = set()
+    for app in ranked:
+        if len(out) >= limit or client.calls["google_play_product"] >= client.settings.max_product_lookups:
+            break
+        if app.product_id in seen:
+            continue
         detail = client.enrich_product(app.product_id)
         if detail is None:
-            enriched.append(app)
+            out.append(app)
+            seen.add(app.product_id)
             continue
         detail.source_query = app.source_query
-        detail.chart = app.chart
-        if not detail.genre and app.genre:
-            detail.genre = app.genre
-        if not detail.description and app.description:
+        if not detail.description:
             detail.description = app.description
-        enriched.append(detail)
+        if not detail.thumbnail:
+            detail.thumbnail = app.thumbnail
+        if not detail.developer:
+            detail.developer = app.developer
+        if detail.rating is None:
+            detail.rating = app.rating
+        out.append(detail)
+        seen.add(app.product_id)
+    for app in apps:
+        if app.product_id not in seen:
+            out.append(app)
+            seen.add(app.product_id)
+    return out
 
-    enriched_ids = {a.product_id for a in enriched}
-    for app in ranked:
-        if app.product_id not in enriched_ids:
-            enriched.append(app)
-        if len(enriched) >= 20:
+
+def run_market_scan(settings: Settings | None = None) -> MarketReport:
+    """Scan two known loops. No idea required. No game-chart engine."""
+    settings = settings or get_settings()
+    client = SerpClient(settings)
+    stories = []
+    for name, query in MARKET_PROBES:
+        if client.play_calls >= settings.max_play_searches:
             break
-
-    web_q = "\"Google Play\" trending mobile games puzzle OR casual"
-    web_hits = client.search_google(web_q)
-
-    return analyze_trends(
-        apps=enriched,
-        sources=sources or ["charts"],
-        web_hits=web_hits,
-        api_calls_used=dict(client.calls),
+        apps = dedupe_by_product_id(client.search_play(query))
+        apps = _enrich(client, apps, settings.max_product_lookups)
+        # Keep enrichment budget shared: only top slice per loop before the cap bites.
+        story = story_for(name, apps[:8])
+        if story:
+            stories.append(story)
+    web_hits = client.search_google("Google Play bus jam OR block blast puzzle")
+    return MarketReport(
+        stories=stories,
         sample_mode=False,
         market=settings.gl,
+        focus="",
+        api_calls_used=dict(client.calls),
+        web_hits=web_hits,
     )
+
+
+def run_loop_scan(loop: str, settings: Settings | None = None) -> MarketReport:
+    """One loop the developer might build. Two query shapes max."""
+    settings = settings or get_settings()
+    name, query = _query_for_loop(loop)
+    client = SerpClient(settings)
+    apps = client.search_play(query)
+    # Second, shorter query if budget remains and it is not identical.
+    short = " ".join(query.split()[:3])
+    if short.lower() != query.lower() and client.play_calls < settings.max_play_searches:
+        apps.extend(client.search_play(short))
+    apps = dedupe_by_product_id(apps)
+    apps = _enrich(client, apps, settings.max_product_lookups)
+    story = story_for(name, apps[:8])
+    web_hits = client.search_google(f"Google Play {name} game")
+    return MarketReport(
+        stories=[story] if story else [],
+        sample_mode=False,
+        market=settings.gl,
+        focus=name,
+        api_calls_used=dict(client.calls),
+        web_hits=web_hits,
+    )
+
+
+def run_trend_scan(settings: Settings | None = None) -> MarketReport:
+    return run_market_scan(settings)
 
 
 def _rank_for_enrichment(idea: GameIdea, apps: list[PlayApp]) -> list[PlayApp]:
@@ -221,136 +270,73 @@ def sample_brief(idea: GameIdea | None = None) -> Brief:
     )
 
 
-def sample_trend_scan():
-    """SAMPLE trend layout — fixture charts, not live SerpApi.
+def sample_trend_scan() -> MarketReport:
+    """SAMPLE shelves: one big tile-blast hit plus two copies, and a full bus-sort pile.
 
-    Descriptions are specific enough for loop classification (bus/parking sort,
-    tile blast, and so on). The page banner still says SAMPLE, not live.
+    Icons are local placeholders so the page stays visual without a network call.
     """
-    apps = [
-        PlayApp(
-            product_id="com.sample.blockblast",
-            title="Block Blast!",
-            developer="Hungry Studio",
-            rating=4.6,
-            ratings_count=20_000_000,
+    icon = "/static/placeholder.svg"
+
+    def app(pid, title, dev, rating, count, desc, loop):
+        return PlayApp(
+            product_id=pid,
+            title=title,
+            developer=dev,
+            rating=rating,
+            ratings_count=count,
+            description=desc,
             genre="Puzzle",
-            description="Blast wooden blocks off the board in this tile blast puzzle.",
-            chart="topselling_free",
-            source_query="chart:topselling_free",
-            link="https://play.google.com/store/apps/details?id=com.sample.blockblast",
-        ),
-        PlayApp(
-            product_id="com.sample.woodoku",
-            title="Wood Block Puzzle",
-            developer="Tripledot",
-            rating=4.7,
-            ratings_count=8_000_000,
-            genre="Puzzle",
-            description="Fit wood blocks, then blast full lines. A tile blast cousin of Block Blast.",
-            chart="topselling_free",
-            source_query="chart:topselling_free",
-            link="https://play.google.com/store/apps/details?id=com.sample.woodoku",
-        ),
-        PlayApp(
-            product_id="com.sample.busjam",
-            title="Bus Jam Out",
-            developer="Ivy Games",
-            rating=4.5,
-            ratings_count=800_000,
-            genre="Puzzle",
-            description="Unblock colorful buses stuck in a parking jam and clear the lot.",
-            chart="topselling_free",
-            source_query="chart:topselling_free",
-            link="https://play.google.com/store/apps/details?id=com.sample.busjam",
-        ),
-        PlayApp(
-            product_id="com.sample.parkingjam",
-            title="Parking Jam 3D",
-            developer="Rollic",
-            rating=4.4,
-            ratings_count=400_000,
-            genre="Puzzle",
-            description="Sort cars out of a crowded parking jam. Tap to unblock the exit.",
-            chart="topselling_free",
-            source_query="chart:topselling_free",
-            link="https://play.google.com/store/apps/details?id=com.sample.parkingjam",
-        ),
-        PlayApp(
-            product_id="com.sample.trafficbus",
-            title="Traffic Jam Bus Puzzle",
-            developer="Easybrain",
-            rating=4.3,
-            ratings_count=120_000,
-            genre="Puzzle",
-            description="Clear a bus traffic jam. Move buses until the parking bay is free.",
-            chart="movers_shakers",
-            source_query="chart:movers_shakers",
-            link="https://play.google.com/store/apps/details?id=com.sample.trafficbus",
-        ),
-        PlayApp(
-            product_id="com.sample.survivor",
-            title="Survivor.io",
-            developer="Habby",
-            rating=4.4,
-            ratings_count=1_200_000,
-            genre="Action",
-            description="Survivor horde game: auto-attack waves in an .io arena.",
-            chart="movers_shakers",
-            source_query="chart:movers_shakers",
-            link="https://play.google.com/store/apps/details?id=com.sample.survivor",
-        ),
-        PlayApp(
-            product_id="com.sample.merge",
-            title="Merge Mansion",
-            developer="Metacore",
-            rating=4.5,
-            ratings_count=22_000,
-            genre="Puzzle",
-            description="Merge items to restore a mansion. Not a jam or blast game.",
-            chart="movers_shakers",
-            source_query="chart:movers_shakers",
-            link="https://play.google.com/store/apps/details?id=com.sample.merge",
-        ),
-        PlayApp(
-            product_id="com.sample.idle",
-            title="Idle Miner Tycoon",
-            developer="Kolibri",
-            rating=4.3,
-            ratings_count=4_000_000,
-            genre="Simulation",
-            description="Idle tycoon: dig, upgrade shafts, and leave the mine running.",
-            chart="topselling_free",
-            source_query="chart:topselling_free",
-            link="https://play.google.com/store/apps/details?id=com.sample.idle",
-        ),
-    ]
-    web_hits = [
-        WebHit(
-            title="SAMPLE: Parking-jam puzzles and tile blast still own casual charts",
-            link="https://example.com/sample-trends",
-            snippet="Writers name Bus Jam clones and Block Blast as the two casual piles, with merge as a thinner slice.",
-            source="example.com",
+            thumbnail=icon,
+            link=f"https://play.google.com/store/apps/details?id={pid}",
+            source_query=loop,
         )
+
+    tile = [
+        app("com.sample.blockblast", "Block Blast!", "Hungry Studio", 4.6, 20_000_000,
+            "Blast wooden blocks off the board.", "tile"),
+        app("com.sample.wood", "Wood Block Puzzle", "Tripledot", 4.5, 800_000,
+            "Wood blocks, then blast full lines.", "tile"),
+        app("com.sample.blockpuz", "Block Puzzle Blast", "Easy Fun", 4.2, 90_000,
+            "Another block blast copy.", "tile"),
     ]
-    return analyze_trends(
-        apps=apps,
-        sources=["topselling_free", "movers_shakers"],
-        web_hits=web_hits,
-        api_calls_used={
-            "google_play": 0,
-            "google_play_games": 0,
-            "google_play_product": 0,
-            "google": 0,
-        },
+    bus = [
+        app("com.sample.bus1", "Bus Jam Out", "Ivy Games", 4.5, 900_000,
+            "Unblock buses stuck in a parking jam.", "bus"),
+        app("com.sample.bus2", "Parking Jam 3D", "Rollic", 4.4, 700_000,
+            "Sort cars out of a parking jam.", "bus"),
+        app("com.sample.bus3", "Traffic Jam Bus Puzzle", "Easybrain", 4.3, 500_000,
+            "Clear a bus traffic jam.", "bus"),
+        app("com.sample.bus4", "Car Jam Parking", "Rollic", 4.2, 420_000,
+            "Parking jam with cars.", "bus"),
+        app("com.sample.bus5", "Bus Sort Puzzle", "Ivy Games", 4.1, 310_000,
+            "Sort buses out of the lot.", "bus"),
+    ]
+    stories = [
+        story_for("tile blast", tile),
+        story_for("bus / parking sort", bus),
+    ]
+    return MarketReport(
+        stories=[s for s in stories if s],
         sample_mode=True,
         market="in",
+        focus="",
+        api_calls_used={"google_play": 0, "google_play_product": 0, "google": 0},
+        web_hits=[
+            WebHit(
+                title="SAMPLE: tile blast still has one giant and a few copies",
+                link="https://example.com/sample-trends",
+                snippet="Writers contrast one block-blast hit with a crowded bus-jam shelf.",
+                source="example.com",
+            )
+        ],
     )
 
 
 
 __all__ = [
     "run_brief",
+    "run_market_scan",
+    "run_loop_scan",
     "run_trend_scan",
     "sample_brief",
     "sample_trend_scan",

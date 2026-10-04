@@ -14,7 +14,8 @@ from .models import GameIdea
 from .service import (
     SerpApiError,
     run_brief,
-    run_trend_scan,
+    run_loop_scan,
+    run_market_scan,
     sample_brief,
     sample_trend_scan,
 )
@@ -64,7 +65,7 @@ async def trends_route(request: Request) -> HTMLResponse:
             "You can open the SAMPLE trend preview to see the layout without credits.",
         )
     try:
-        scan = run_trend_scan(settings)
+        scan = run_market_scan(settings)
     except SerpApiError as exc:
         return templates.TemplateResponse(
             request,
@@ -81,6 +82,43 @@ async def trends_route(request: Request) -> HTMLResponse:
         "trends.html",
         scan.to_template_dict(),
     )
+
+
+
+@app.post("/loop", response_class=HTMLResponse)
+async def loop_route(request: Request, loop: str = Form("")) -> HTMLResponse:
+    settings = get_settings()
+    text = (loop or "").strip()
+    if not text:
+        return templates.TemplateResponse(
+            request,
+            "index.html",
+            {
+                "has_api_key": settings.has_api_key,
+                "error": "Type a loop, or run the market scan with no idea.",
+                "loop": loop,
+            },
+            status_code=400,
+        )
+    if not settings.has_api_key:
+        return _setup_error(
+            request,
+            "Open the SAMPLE board to see a hit and its copies without credits.",
+        )
+    try:
+        scan = run_loop_scan(text, settings)
+    except SerpApiError as exc:
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {
+                "heading": "SerpApi error",
+                "message": str(exc),
+                "hint": "Check the key, remaining credits, and network, then try again.",
+            },
+            status_code=502,
+        )
+    return templates.TemplateResponse(request, "trends.html", scan.to_template_dict())
 
 
 @app.get("/sample", response_class=HTMLResponse)
