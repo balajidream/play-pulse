@@ -1,0 +1,14 @@
+{
+  "product_info": {
+    "title": "Bus Jam - Traffic Puzzle",
+    "authors": [{"name": "Jam Co"}],
+    "rating": 4.5,
+    "reviews": 150000,
+    "thumbnail": "https://example.com/thumb.png"
+  },
+  "about_this_app": {
+    "snippet": "Unblock colorful buses stuck in island parking lots. Match passengers and clear the bay.",
+    "offered_by": "Jam Co"
+  },
+  "categories": [{"name": "Puzzle", "category_id": "GAME_PUZZLE"}]
+}

@@ -1,0 +1,26 @@
+{
+  "organic_results": [
+    {
+      "items": [
+        {
+          "title": "Bus Jam - Traffic Puzzle",
+          "link": "https://play.google.com/store/apps/details?id=com.jam.bus",
+          "product_id": "com.jam.bus",
+          "rating": 4.5,
+          "author": "Jam Co",
+          "category": "Puzzle",
+          "description": "Unblock colorful buses in parking jams."
+        },
+        {
+          "title": "Parking Sort Puzzle",
+          "link": "https://play.google.com/store/apps/details?id=com.park.sort",
+          "product_id": "com.park.sort",
+          "rating": 4.2,
+          "author": "Park Labs",
+          "category": "Puzzle",
+          "description": "Sort cars and buses into colored bays."
+        }
+      ]
+    }
+  ]
+}

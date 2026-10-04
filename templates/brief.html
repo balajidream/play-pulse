@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{% if sample_mode %}SAMPLE — {% endif %}Shelf brief · {{ idea.title }}{% endblock %}
+{% block content %}
+
+{% if sample_mode %}
+<section class="banner sample">
+  <strong>SAMPLE PREVIEW — NOT LIVE SERPAPI DATA</strong>
+  <span>Fixture apps and articles for layout only. Use “Build live brief” with a key for real Play results.</span>
+</section>
+{% endif %}
+
+<section class="card">
+  <p class="eyebrow">{% if sample_mode %}SAMPLE brief{% else %}Live shelf brief{% endif %}</p>
+  <h1>{{ idea.title }}</h1>
+  <p class="lede">{{ idea.pitch }}</p>
+  {% if idea.keywords %}<p class="fine">Keywords: {{ idea.keywords }}</p>{% endif %}
+  <div class="sat-pill sat-{{ saturation_label.split()[0]|lower }}">
+    <strong>{{ saturation_label }}</strong>
+    <span>{{ saturation_detail }}</span>
+  </div>
+</section>
+
+<section class="grid two">
+  <article class="card">
+    <h2>Findings</h2>
+    <ol class="findings">
+      {% for f in findings %}<li>{{ f }}</li>{% endfor %}
+    </ol>
+  </article>
+  <article class="card">
+    <h2>Title / positioning cautions</h2>
+    <ol class="findings caution">
+      {% for c in cautions %}<li>{{ c }}</li>{% endfor %}
+    </ol>
+  </article>
+</section>
+
+<section class="card">
+  <h2>Queries planned (not raw pitch only)</h2>
+  <ul class="chips">
+    {% for q in queries %}<li><code>{{ q }}</code></li>{% endfor %}
+  </ul>
+  {% if api_calls_used %}
+  <p class="fine">
+    SerpApi calls this run:
+    Play {{ api_calls_used.get('google_play', 0) }} ·
+    Product {{ api_calls_used.get('google_play_product', 0) }} ·
+    Google {{ api_calls_used.get('google', 0) }}
+  </p>
+  {% endif %}
+</section>
+
+<section class="grid two">
+  <article class="card">
+    <h2>Title-token frequency</h2>
+    <p class="fine">How often distinctive words appear across competitor titles.</p>
+    {% if token_stats %}
+    <table>
+      <thead><tr><th>Token</th><th>Apps</th><th>Share</th></tr></thead>
+      <tbody>
+        {% for t in token_stats %}
+        <tr>
+          <td><code>{{ t.token }}</code></td>
+          <td>{{ t.count }}</td>
+          <td>
+            <div class="bar"><span style="width: {{ (t.share * 100)|int }}%"></span></div>
+            {{ (t.share * 100)|int }}%
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No tokens yet.</p>
+    {% endif %}
+    <p class="fine">Close title matches: <strong>{{ close_title_matches }}</strong> ·
+      Heavy-review apps ({{ '{:,}'.format(50000) }}+): <strong>{{ heavy_review_apps }}</strong></p>
+    {% if pitch_overlap %}
+    <p class="fine">Pitch overlap with shelf copy:
+      {% for w in pitch_overlap %}<code>{{ w }}</code> {% endfor %}
+    </p>
+    {% endif %}
+  </article>
+
+  <article class="card">
+    <h2>What people are writing</h2>
+    <p class="fine">Google web organic results — separate from the store shelf.</p>
+    {% if web_hits %}
+    <ul class="web">
+      {% for h in web_hits %}
+      <li>
+        <a href="{{ h.link }}" target="_blank" rel="noopener">{{ h.title }}</a>
+        <span class="src">{{ h.source }}</span>
+        <p>{{ h.snippet }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No web hits for the coverage query.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="card">
+  <h2>Play shelf (deduped by product id)</h2>
+  <div class="apps">
+    {% for a in apps %}
+    <article class="app">
+      <div>
+        <h3><a href="{{ a.link }}" target="_blank" rel="noopener">{{ a.title }}</a></h3>
+        <p class="meta">
+          {{ a.developer or 'Unknown developer' }}
+          {% if a.genre %} · {{ a.genre }}{% endif %}
+          {% if a.rating is not none %} · {{ '%.1f'|format(a.rating) }}★{% endif %}
+          {% if a.ratings_count is not none %} · {{ '{:,}'.format(a.ratings_count) }} ratings{% endif %}
+        </p>
+        {% if a.description %}<p class="snip">{{ a.description }}</p>{% endif %}
+        <p class="fine"><code>{{ a.product_id }}</code>
+          {% if a.source_query %} · via “{{ a.source_query }}”{% endif %}
+        </p>
+      </div>
+    </article>
+    {% else %}
+    <p>No Play apps returned.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="actions">
+  <a class="btn primary" href="/">Home</a>
+  <a class="btn ghost" href="/#idea-check">Another idea</a>
+  {% if not sample_mode %}<a class="btn ghost" href="/sample/idea">SAMPLE idea</a>{% endif %}
+</div>
+{% endblock %}

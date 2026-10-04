@@ -1,0 +1,35 @@
+{
+  "organic_results": [
+    {
+      "items": [
+        {
+          "title": "Block Blast Puzzle",
+          "link": "https://play.google.com/store/apps/details?id=com.block.blast",
+          "product_id": "com.block.blast",
+          "rating": 4.6,
+          "author": "Hungry Studio",
+          "category": "Puzzle",
+          "description": "Block puzzle game."
+        },
+        {
+          "title": "Bus Jam",
+          "link": "https://play.google.com/store/apps/details?id=com.bus.jam",
+          "product_id": "com.bus.jam",
+          "rating": 4.5,
+          "author": "Bus Co",
+          "category": "Puzzle",
+          "description": "Parking jam buses."
+        },
+        {
+          "title": "Idle Miner Tycoon",
+          "link": "https://play.google.com/store/apps/details?id=com.idle.miner",
+          "product_id": "com.idle.miner",
+          "rating": 4.3,
+          "author": "Idle Inc",
+          "category": "Simulation",
+          "description": "Idle mining tycoon."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[project]
+name = "shelf-check"
+version = "1.0.0"
+description = "Play Pulse — Google Play trend scans and idea briefs (SerpApi)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

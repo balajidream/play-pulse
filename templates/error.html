@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Play Pulse — {{ heading }}{% endblock %}
+{% block content %}
+<section class="card error-card">
+  <h1>{{ heading }}</h1>
+  <p class="lede">{{ message }}</p>
+  {% if hint %}<p class="fine">{{ hint }}</p>{% endif %}
+  <div class="actions">
+    <a class="btn primary" href="/">Back</a>
+    <a class="btn ghost" href="/sample/trends">SAMPLE trend</a>
+    <a class="btn ghost" href="/sample/idea">SAMPLE idea</a>
+  </div>
+</section>
+{% endblock %}

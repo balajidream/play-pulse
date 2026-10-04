@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Play Pulse — Play trend scan{% endblock %}
+{% block content %}
+<section class="hero card">
+  <h1>Mobile game trend scan</h1>
+  <p class="lede">
+    Live SerpApi Google Play charts answer three questions for an indie developer:
+    <strong>what’s trending</strong>, <strong>what still has room</strong>, and
+    <strong>what’s worth building next</strong> — with numbers, not a chatbot.
+  </p>
+  {% if has_api_key %}
+  <p class="badge ok">SERPAPI_API_KEY detected — live mode ready</p>
+  {% else %}
+  <p class="badge warn">No SERPAPI_API_KEY — live scans show a setup error. SAMPLE previews still work.</p>
+  {% endif %}
+  <form method="post" action="/trends" class="actions" style="margin-top:1rem">
+    <button type="submit" class="btn primary">Scan live Play trends</button>
+    <a class="btn ghost" href="/sample/trends">SAMPLE trend preview</a>
+  </form>
+  <p class="fine">
+    ~2 game charts + up to 5 product lookups + 1 Google web search (≤ ~8–9 credits).
+  </p>
+</section>
+
+{% if error %}
+<p class="flash error">{{ error }}</p>
+{% endif %}
+
+<section class="card" id="idea-check">
+  <h2>Second mode: check my idea</h2>
+  <p class="lede">
+    Already have a working title? Run the competitive shelf brief against Play search + product enrichment.
+  </p>
+  <form class="form" method="post" action="/analyze">
+    <label>
+      Working title
+      <input name="title" required maxlength="80" placeholder="Rush Bay"
+             value="{{ title or '' }}" />
+    </label>
+    <label>
+      One-line pitch
+      <input name="pitch" required maxlength="200"
+             placeholder="unblock colorful buses, match passengers, clear island parking bays"
+             value="{{ pitch or '' }}" />
+    </label>
+    <label>
+      Extra keywords <span class="optional">(optional)</span>
+      <input name="keywords" maxlength="120" placeholder="bus parking sort puzzle"
+             value="{{ keywords or '' }}" />
+    </label>
+    <div class="actions">
+      <button type="submit" class="btn primary">Build idea brief</button>
+      <a class="btn ghost" href="/sample/idea">SAMPLE idea preview</a>
+    </div>
+    <p class="fine">
+      Caps ~3 Play searches + up to 5 product lookups + 1 Google web search.
+    </p>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Play Pulse{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="/">Play Pulse</a>
+      <p class="tagline">See what’s trending on Google Play, where there’s still room, and what an indie should build next.</p>
+    </div>
+  </header>
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="wrap foot">
+    <p>SerpApi India Hackathon 2026 · Commerce &amp; Market Intelligence · MIT</p>
+  </footer>
+</body>
+</html>
