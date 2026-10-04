@@ -26,6 +26,7 @@ class PlayApp:
     thumbnail: str = ""
     source_query: str = ""
     chart: str = ""
+    downloads_hint: int | None = None
 
 
 @dataclass

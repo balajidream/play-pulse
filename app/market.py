@@ -21,14 +21,21 @@ class ShelfStory:
     hit: PlayApp
     clones: list[PlayApp]
     size_note: str
+    seen_count: int = 0
+    more_count: int = 0
+    first_page_only: bool = False
 
     def to_dict(self) -> dict:
+        shown = self.clones[:4]
         return {
             "loop_name": self.loop_name,
             "label": self.label,
             "hit": self.hit,
-            "clones": self.clones[:4],
+            "clones": shown,
             "size_note": self.size_note,
+            "seen_count": self.seen_count,
+            "more_count": self.more_count,
+            "first_page_only": self.first_page_only,
         }
 
 
@@ -89,7 +96,9 @@ def size_note(apps: list[PlayApp], label: str) -> str:
     return f"Biggest by ratings, not launch date. {copies}. {label}."
 
 
-def story_for(loop_name: str, apps: list[PlayApp]) -> ShelfStory | None:
+def story_for(
+    loop_name: str, apps: list[PlayApp], first_page_only: bool = False
+) -> ShelfStory | None:
     unique: list[PlayApp] = []
     seen: set[str] = set()
     for app in apps:
@@ -101,10 +110,15 @@ def story_for(loop_name: str, apps: list[PlayApp]) -> ShelfStory | None:
         return None
     ranked = rank_by_size(unique)
     label = shelf_label(ranked)
+    shown = ranked[1:5]
+    more = max(len(ranked) - 1 - len(shown), 0)
     return ShelfStory(
         loop_name=loop_name,
         label=label,
         hit=ranked[0],
-        clones=ranked[1:5],
+        clones=shown,
         size_note=size_note(ranked, label),
+        seen_count=len(ranked),
+        more_count=more,
+        first_page_only=first_page_only,
     )

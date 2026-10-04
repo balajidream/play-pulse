@@ -1,7 +1,8 @@
 """Thin SerpApi HTTP client for Play charts/search, Play product, and Google web.
 
 Parameter names match official docs:
-- google_play: engine, q, chart, apps_category, hl, gl, api_key
+- google_play: engine, q, hl, gl, api_key, next_page_token
+  (no start offset; serpapi_pagination.next_page_token continues the search)
 - google_play_games: engine, chart, games_category, hl, gl, api_key
   (verified at https://serpapi.com/google-play-games — used for mobile game charts)
 - google_play_product: engine, product_id, store, hl, gl, api_key
@@ -99,6 +100,7 @@ class SerpClient:
                         thumbnail=item.get("thumbnail") or item.get("icon") or "",
                         source_query=source_label,
                         chart=chart,
+                        downloads_hint=_downloads(item.get("downloads")),
                     )
                 )
         return apps
@@ -110,6 +112,40 @@ class SerpClient:
         data = self._request({"engine": "google_play", "q": query})
         self.calls["google_play"] += 1
         return self._parse_play_items(data, source_label=query)
+
+    def search_play_pages(
+        self, query: str, max_pages: int | None = None, max_unique: int | None = None
+    ) -> tuple[list[PlayApp], bool]:
+        """Page a Play search with next_page_token.
+
+        Returns (unique apps, first_page_only). first_page_only is True when
+        the first response has no next_page_token, so the UI must not claim
+        the shelf was exhausted beyond page 1.
+        """
+        pages_cap = max_pages if max_pages is not None else self.settings.max_play_pages
+        unique_cap = max_unique if max_unique is not None else self.settings.max_unique_per_loop
+        collected: list[PlayApp] = []
+        token = ""
+        pages = 0
+        saw_next = False
+        while pages < pages_cap and len(dedupe_by_product_id(collected)) < unique_cap:
+            if self.play_calls >= self.settings.max_play_searches:
+                break
+            params: dict[str, Any] = {"engine": "google_play", "q": query}
+            if token:
+                params["next_page_token"] = token
+            data = self._request(params)
+            self.calls["google_play"] += 1
+            pages += 1
+            collected.extend(self._parse_play_items(data, source_label=query))
+            token = ((data.get("serpapi_pagination") or {}).get("next_page_token") or "").strip()
+            if token:
+                saw_next = True
+            else:
+                break
+        unique = dedupe_by_product_id(collected)[:unique_cap]
+        first_page_only = pages <= 1 and not saw_next
+        return unique, first_page_only
 
     def chart_games(
         self, chart: str, games_category: str = "GAME"
@@ -204,6 +240,31 @@ def _as_int(value: Any) -> int | None:
     if isinstance(value, float):
         return int(value)
     text = str(value).strip().upper().replace(",", "")
+    mult = 1
+    if text.endswith("K"):
+        mult = 1_000
+        text = text[:-1]
+    elif text.endswith("M"):
+        mult = 1_000_000
+        text = text[:-1]
+    elif text.endswith("B"):
+        mult = 1_000_000_000
+        text = text[:-1]
+    try:
+        return int(float(text) * mult)
+    except (TypeError, ValueError):
+        return None
+
+
+def _downloads(value: Any) -> int | None:
+    """Parse Play download strings like '500,000,000+' into an int hint."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    text = str(value).upper().replace(",", "").replace("+", "").strip()
     mult = 1
     if text.endswith("K"):
         mult = 1_000

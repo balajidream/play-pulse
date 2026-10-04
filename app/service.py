@@ -80,9 +80,15 @@ def _query_for_loop(loop: str) -> tuple[str, str]:
 
 
 def _enrich(client: SerpClient, apps: list[PlayApp], limit: int) -> list[PlayApp]:
+    """Product lookups for the likely hit and a few copies only."""
     ranked = sorted(
         apps,
-        key=lambda a: (a.ratings_count is not None, -(a.rating or 0), a.title.lower()),
+        key=lambda a: (
+            -(a.downloads_hint or 0),
+            -(a.ratings_count or 0),
+            -(a.rating or 0),
+            a.title.lower(),
+        ),
     )
     out: list[PlayApp] = []
     seen: set[str] = set()
@@ -122,10 +128,11 @@ def run_market_scan(settings: Settings | None = None) -> MarketReport:
     for name, query in MARKET_PROBES:
         if client.play_calls >= settings.max_play_searches:
             break
-        apps = dedupe_by_product_id(client.search_play(query))
-        apps = _enrich(client, apps, settings.max_product_lookups)
-        # Keep enrichment budget shared: only top slice per loop before the cap bites.
-        story = story_for(name, apps[:8])
+        remaining = settings.max_product_lookups - client.calls["google_play_product"]
+        per_loop = min(3, remaining)
+        apps, first_only = client.search_play_pages(query)
+        apps = _enrich(client, apps, per_loop)
+        story = story_for(name, apps, first_page_only=first_only)
         if story:
             stories.append(story)
     web_hits = client.search_google("Google Play bus jam OR block blast puzzle")
@@ -144,14 +151,9 @@ def run_loop_scan(loop: str, settings: Settings | None = None) -> MarketReport:
     settings = settings or get_settings()
     name, query = _query_for_loop(loop)
     client = SerpClient(settings)
-    apps = client.search_play(query)
-    # Second, shorter query if budget remains and it is not identical.
-    short = " ".join(query.split()[:3])
-    if short.lower() != query.lower() and client.play_calls < settings.max_play_searches:
-        apps.extend(client.search_play(short))
-    apps = dedupe_by_product_id(apps)
+    apps, first_only = client.search_play_pages(query)
     apps = _enrich(client, apps, settings.max_product_lookups)
-    story = story_for(name, apps[:8])
+    story = story_for(name, apps, first_page_only=first_only)
     web_hits = client.search_google(f"Google Play {name} game")
     return MarketReport(
         stories=[story] if story else [],

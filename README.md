@@ -23,7 +23,9 @@ An indie deciding what to prototype next — or validating a working title befor
 
 **Localization:** `hl=en`, `gl=in`.
 
-**Call budget:** about **≤10 credits** (market: 2 Play searches + ≤5 products + 1 Google; one loop: ≤2 searches + ≤5 products + 1 Google).
+**Paging:** `google_play` has no `start` offset. Each extra page sends `next_page_token` from `serpapi_pagination`. Cap is **3 pages** or **40 unique titles** per loop. If the first response has no token, the card says **first page only**.
+
+**Call budget:** page searches are the bulk (up to 3 per loop, 2 loops on a market scan). Product lookups stay **≤5** (the hit and a few copies). Plus one Google search.
 
 There is **no LLM API**. Analysis is deterministic Python.
 

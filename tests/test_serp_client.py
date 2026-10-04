@@ -138,3 +138,87 @@ def test_dedupe():
     ]
     out = dedupe_by_product_id(apps)
     assert [a.product_id for a in out] == ["a", "b"]
+
+
+def _page(ids, token=""):
+    items = [
+        {
+            "title": f"Game {pid}",
+            "product_id": pid,
+            "rating": 4.2,
+            "author": "Dev",
+            "description": "puzzle",
+            "thumbnail": "https://example.com/icon.png",
+        }
+        for pid in ids
+    ]
+    data = {"organic_results": [{"items": items}]}
+    if token:
+        data["serpapi_pagination"] = {"next_page_token": token}
+    return data
+
+
+def test_search_play_pages_follows_next_page_token_not_start():
+    pages = [
+        _page(["a1", "a2"], token="PAGE2"),
+        _page(["a2", "a3"], token="PAGE3"),
+        _page(["a4"]),
+    ]
+    mock_get = MagicMock()
+    responses = []
+    for payload in pages:
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = payload
+        responses.append(resp)
+    mock_get.side_effect = responses
+
+    client = SerpClient(_settings(max_play_searches=6, max_play_pages=3, max_unique_per_loop=40), get=mock_get)
+    apps, first_only = client.search_play_pages("block blast")
+    assert first_only is False
+    assert [a.product_id for a in apps] == ["a1", "a2", "a3", "a4"]
+    assert mock_get.call_count == 3
+    first_params = mock_get.call_args_list[0].kwargs["params"]
+    assert first_params["engine"] == "google_play"
+    assert "start" not in first_params
+    assert "next_page_token" not in first_params
+    second = mock_get.call_args_list[1].kwargs["params"]
+    assert second["next_page_token"] == "PAGE2"
+    third = mock_get.call_args_list[2].kwargs["params"]
+    assert third["next_page_token"] == "PAGE3"
+
+
+def test_search_play_pages_first_page_only_when_no_token():
+    mock_get = MagicMock()
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = _page(["only"])
+    mock_get.return_value = resp
+    client = SerpClient(_settings(max_play_searches=6), get=mock_get)
+    apps, first_only = client.search_play_pages("bus jam")
+    assert first_only is True
+    assert len(apps) == 1
+    assert mock_get.call_count == 1
+
+
+def test_search_play_pages_caps_unique_titles():
+    pages = [
+        _page([f"p{i}" for i in range(10)], token="N"),
+        _page([f"q{i}" for i in range(10)], token="N2"),
+        _page([f"r{i}" for i in range(10)]),
+    ]
+    mock_get = MagicMock()
+    responses = []
+    for payload in pages:
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = payload
+        responses.append(resp)
+    mock_get.side_effect = responses
+    client = SerpClient(
+        _settings(max_play_searches=6, max_play_pages=3, max_unique_per_loop=12),
+        get=mock_get,
+    )
+    apps, first_only = client.search_play_pages("tile")
+    assert len(apps) == 12
+    assert first_only is False

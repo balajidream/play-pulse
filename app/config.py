@@ -11,8 +11,11 @@ load_dotenv()
 
 SERPAPI_BASE_URL = "https://serpapi.com/search.json"
 
-# Cap SerpApi usage (~10 calls) so a free 250-credit account can demo.
-MAX_PLAY_SEARCHES = 3  # charts + optional q on google_play / google_play_games
+# Page searches are the bulk. Product lookups stay small.
+# google_play has no start offset; pages use next_page_token (official docs).
+MAX_PLAY_SEARCHES = 6  # up to 3 pages x 2 loop probes
+MAX_PLAY_PAGES = 3
+MAX_UNIQUE_PER_LOOP = 40
 MAX_PRODUCT_LOOKUPS = 5
 MAX_GOOGLE_SEARCHES = 1
 
@@ -28,6 +31,8 @@ class Settings:
     hl: str = DEFAULT_HL
     gl: str = DEFAULT_GL
     max_play_searches: int = MAX_PLAY_SEARCHES
+    max_play_pages: int = MAX_PLAY_PAGES
+    max_unique_per_loop: int = MAX_UNIQUE_PER_LOOP
     max_product_lookups: int = MAX_PRODUCT_LOOKUPS
     max_google_searches: int = MAX_GOOGLE_SEARCHES
 

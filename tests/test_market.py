@@ -33,3 +33,13 @@ def test_sample_tells_both_stories():
     assert labels["tile blast"] == "Early"
     assert labels["bus / parking sort"] == "Filled"
     assert report.stories[0].hit.thumbnail.startswith("/static/")
+
+
+def test_seen_count_and_more():
+    apps = [_app(str(i), f"Title {i}", 1_000_000 - i) for i in range(10)]
+    story = story_for("tile blast", apps, first_page_only=True)
+    assert story.seen_count == 10
+    assert story.more_count == 10 - 1 - len(story.clones)
+    assert story.more_count > 0
+    assert story.first_page_only is True
+    assert story.hit.title == "Title 0"

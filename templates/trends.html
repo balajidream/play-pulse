@@ -16,6 +16,7 @@
     <h2>{{ s.loop_name }}</h2>
     <span class="pill {{ s.label|lower }}">{{ s.label }}</span>
   </header>
+  <p class="fine">{{ s.seen_count }} titles{% if s.first_page_only %} · first page only{% endif %}</p>
   <div class="row">
     <a class="hit" href="{{ s.hit.link }}" target="_blank" rel="noopener">
       <img src="{{ s.hit.thumbnail or '/static/placeholder.svg' }}" alt="" />
@@ -44,6 +45,7 @@
       {% else %}
       <p class="fine">No copies in this pull.</p>
       {% endfor %}
+      {% if s.more_count %}<p class="more">+ {{ s.more_count }} more</p>{% endif %}
     </div>
   </div>
   <p class="fine">{{ s.size_note }}</p>
