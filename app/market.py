@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .loops import classify_loop, loop_name
 from .models import PlayApp, WebHit
 
 # A "giant" incumbent. Below this, a small cluster can still look early.
@@ -12,6 +13,9 @@ GIANT_RATINGS = 500_000
 SIZE_GAP = 5
 # More copies than this means the shelf is filled.
 FILLED_CLONES = 4
+# A shelf needs the hit plus at least this many copies.
+MIN_COPIES = 3
+MAX_SHELVES = 20
 
 
 @dataclass
@@ -47,6 +51,7 @@ class MarketReport:
     focus: str = ""
     api_calls_used: dict[str, int] = field(default_factory=dict)
     web_hits: list[WebHit] = field(default_factory=list)
+    qualified_count: int = 0
 
     def to_template_dict(self) -> dict:
         return {
@@ -56,6 +61,8 @@ class MarketReport:
             "focus": self.focus,
             "api_calls_used": self.api_calls_used,
             "web_hits": self.web_hits[:3],
+            "qualified_count": self.qualified_count,
+            "shown_count": len(self.stories),
         }
 
 
@@ -122,3 +129,30 @@ def story_for(
         more_count=more,
         first_page_only=first_page_only,
     )
+
+
+def discover_shelves(apps: list[PlayApp], first_page_only: bool = False) -> list[ShelfStory]:
+    """Group titles with the loop classifier. Drop groups with fewer than 3 copies.
+
+    Order is fewest copies first (the opportunity order). At most 20 shelves.
+    """
+    buckets: dict[str, list[PlayApp]] = {}
+    seen: set[str] = set()
+    for app in apps:
+        if not app.product_id or app.product_id in seen:
+            continue
+        seen.add(app.product_id)
+        loop_id = classify_loop(app)
+        if not loop_id:
+            continue
+        buckets.setdefault(loop_id, []).append(app)
+    stories: list[ShelfStory] = []
+    for loop_id, group in buckets.items():
+        if len(group) < MIN_COPIES + 1:
+            continue
+        story = story_for(loop_name(loop_id), group, first_page_only=first_page_only)
+        if story is None or story.seen_count < MIN_COPIES + 1:
+            continue
+        stories.append(story)
+    stories.sort(key=lambda s: (s.seen_count - 1, s.loop_name.lower()))
+    return stories

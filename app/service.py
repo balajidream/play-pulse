@@ -7,7 +7,7 @@ from .config import Settings, get_settings
 from .models import Brief, GameIdea, PlayApp, WebHit
 from .query_planner import plan_coverage_query, plan_queries
 from .serp_client import SerpApiError, SerpClient, dedupe_by_product_id
-from .market import MarketReport, story_for
+from .market import MarketReport, discover_shelves, story_for
 
 
 def run_brief(idea: GameIdea, settings: Settings | None = None) -> Brief:
@@ -58,12 +58,8 @@ def run_brief(idea: GameIdea, settings: Settings | None = None) -> Brief:
     )
 
 
-# Preset shelves for a market scan that does not need an idea.
-# Two Play searches leave room for product lookups + one web search (~8 calls).
-MARKET_PROBES = (
-    ("bus / parking sort", "bus jam parking puzzle"),
-    ("tile blast", "block blast puzzle"),
-)
+# Broad discovery only. Loops are classified from the titles, not chosen here.
+DISCOVERY_QUERIES = ("puzzle game", "casual game", "arcade game", "simulation game")
 
 
 def _query_for_loop(loop: str) -> tuple[str, str]:
@@ -127,21 +123,45 @@ def _enrich(client: SerpClient, apps: list[PlayApp], limit: int) -> list[PlayApp
 
 
 def run_market_scan(settings: Settings | None = None) -> MarketReport:
-    """Scan two known loops. No idea required. No game-chart engine."""
+    """Discover loops from charts and broad Play searches. No preset loop list."""
     settings = settings or get_settings()
     client = SerpClient(settings)
-    stories = []
-    for name, query in MARKET_PROBES:
+    collected: list[PlayApp] = []
+    paged = False
+    try:
+        collected.extend(client.chart_games("topselling_free"))
+    except SerpApiError:
+        pass
+    for index, query in enumerate(DISCOVERY_QUERIES):
         if client.play_calls >= settings.max_play_searches:
             break
-        remaining = settings.max_product_lookups - client.calls["google_play_product"]
-        per_loop = min(3, remaining)
-        apps, first_only = client.search_play_pages(query)
-        apps = _enrich(client, apps, per_loop)
-        story = story_for(name, apps, first_page_only=first_only)
-        if story:
-            stories.append(story)
-    web_hits = client.search_google("Google Play bus jam OR block blast puzzle")
+        # First broad query may take a second page if the call cap allows.
+        pages = 2 if index == 0 else 1
+        pages = min(pages, settings.max_play_searches - client.play_calls)
+        if pages < 1:
+            break
+        try:
+            apps, first_only = client.search_play_pages(query, max_pages=pages)
+        except SerpApiError:
+            continue
+        if not first_only:
+            paged = True
+        collected.extend(apps)
+    ranked = discover_shelves(collected, first_page_only=not paged)
+    qualified = len(ranked)
+    stories = ranked[:20]
+    # Product calls only for a few hits. Copy icons stay on search thumbnails.
+    hits = [s.hit for s in stories[: settings.max_product_lookups]]
+    enriched = _enrich(client, hits, settings.max_product_lookups)
+    by_id = {a.product_id: a for a in enriched}
+    for story in stories:
+        replacement = by_id.get(story.hit.product_id)
+        if replacement is not None and replacement.ratings_count is not None:
+            story.hit = replacement
+    try:
+        web_hits = client.search_google("Google Play mobile games puzzle OR casual")
+    except SerpApiError:
+        web_hits = []
     return MarketReport(
         stories=stories,
         sample_mode=False,
@@ -149,6 +169,7 @@ def run_market_scan(settings: Settings | None = None) -> MarketReport:
         focus="",
         api_calls_used=dict(client.calls),
         web_hits=web_hits,
+        qualified_count=qualified,
     )
 
 
@@ -306,6 +327,14 @@ def sample_trend_scan() -> MarketReport:
             "Wood blocks, then blast full lines.", "tile"),
         app("com.sample.blockpuz", "Block Puzzle Blast", "Easy Fun", 4.2, 90_000,
             "Another block blast copy.", "tile"),
+        app("com.sample.tileblast", "Tile Blast Rush", "Easy Fun", 4.1, 40_000,
+            "Tile blast copy.", "tile"),
+    ]
+    thin = [
+        app("com.sample.merge1", "Merge Mansion", "Metacore", 4.5, 22_000,
+            "Merge items in a mansion.", "merge"),
+        app("com.sample.merge2", "Merge Garden", "Metacore", 4.4, 10_000,
+            "Merge a garden.", "merge"),
     ]
     bus = [
         app("com.sample.bus1", "Bus Jam Out", "Ivy Games", 4.5, 900_000,
@@ -319,15 +348,13 @@ def sample_trend_scan() -> MarketReport:
         app("com.sample.bus5", "Bus Sort Puzzle", "Ivy Games", 4.1, 310_000,
             "Sort buses out of the lot.", "bus"),
     ]
-    stories = [
-        story_for("tile blast", tile),
-        story_for("bus / parking sort", bus),
-    ]
+    stories = discover_shelves(tile + bus + thin, first_page_only=False)
     return MarketReport(
-        stories=[s for s in stories if s],
+        stories=stories,
         sample_mode=True,
         market="in",
         focus="",
+        qualified_count=len(stories),
         api_calls_used={"google_play": 0, "google_play_product": 0, "google": 0},
         web_hits=[
             WebHit(

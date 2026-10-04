@@ -14,10 +14,10 @@ An indie deciding what to prototype next — or validating a working title befor
 
 | Engine | Mode | Why |
 | --- | --- | --- |
-| `google_play` | Market scan and loop check | `q` finds games in one loop so the hit and the copies are on the same shelf. |
-| `google_play_product` | Both | Ratings count, developer, description, and `product_info.thumbnail` (`store=apps`). |
-| `google` | Both | One web search for coverage, separate from the shelf. |
-| `google_play_games` | Not used for this scan | Charts are in the client, but a chart does not show clones of one loop. |
+| `google_play` | Market scan | Broad queries (`puzzle game`, `casual game`, `arcade game`, `simulation game`), paged with `next_page_token`. |
+| `google_play_games` | Market scan | One chart pull: `chart=topselling_free`, `games_category=GAME`. |
+| `google_play_product` | Hits only | At most 5 lookups so a few hit icons can be refreshed. Copy icons use search `thumbnail`. |
+| `google` | Coverage | One web search, separate from the shelf. |
 
 **Icons:** `thumbnail` on Play search items, and `thumbnail` or `icon` on the product payload. Missing image → `/static/placeholder.svg`.
 
@@ -25,7 +25,7 @@ An indie deciding what to prototype next — or validating a working title befor
 
 **Paging:** `google_play` has no `start` offset. Each extra page sends `next_page_token` from `serpapi_pagination`. Cap is **3 pages** or **40 unique titles** per loop. If the first response has no token, the card says **first page only**.
 
-**Call budget:** page searches are the bulk (up to 3 per loop, 2 loops on a market scan). Product lookups stay **≤5** (the hit and a few copies). Plus one Google search.
+**Call budget:** one chart plus those broad searches, paged only while the 6-search cap lasts. Product lookups stay **≤5**. Loops are classified from the titles. A shelf is kept only with at least 3 copies, then sorted fewest copies first, up to 20.
 
 There is **no LLM API**. Analysis is deterministic Python.
 
@@ -60,7 +60,7 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 Each loop is one card: a large hit (icon, title, rating, ratings count) and smaller clone cards. **Early** means one much larger title and only a few copies, or a few similar titles with no giant. **Filled** means many copies. Icons come from SerpApi `thumbnail` (or `icon`) on `google_play` and `google_play_product`. If that URL is missing, the page uses `/static/placeholder.svg`.
 
-Market scan: two Play searches (`bus jam parking puzzle`, `block blast puzzle`), up to 5 product lookups, one Google search. A single loop uses the same engines with at most two queries. No launch dates are invented.
+Market scan discovers loops from the chart and broad searches above. It does not start from a fixed pair of loops. A typed loop check still searches that one phrase.
 
 Idea check (title + pitch) is still at `POST /analyze`.
 

@@ -7,6 +7,9 @@
 </section>
 {% endif %}
 <p class="fine">{% if focus %}{{ focus }} · {% endif %}Biggest by ratings count, not launch date.{% if market %} · {{ market|upper }}{% endif %}</p>
+{% if not focus %}
+<p class="fine">{{ shown_count }} {{ 'shelf' if shown_count == 1 else 'shelves' }} with at least 3 copies{% if qualified_count > shown_count %} · showing 20 of {{ qualified_count }}{% elif shown_count < 20 %} · all that qualified{% endif %}. Fewest copies first.</p>
+{% endif %}
 {% if not stories %}
 <p class="card">No games came back for this pull.</p>
 {% endif %}
